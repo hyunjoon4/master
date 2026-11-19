@@ -372,9 +372,17 @@ article.card.picked{border-color:#9ad9b5;background:#f6fdf9}
   }
   function timeOrder(text){
     var value = String(text || '');
+    var clock = value.match(/(\d{1,2})\s*[:시]\s*(\d{1,2})?/);
+    if (clock) {
+      var hour = +clock[1];
+      var minute = clock[2] ? +clock[2] : 0;
+      if (value.indexOf('오후') >= 0 && hour < 12) hour += 12;
+      if (value.indexOf('오전') >= 0 && hour === 12) hour = 0;
+      return hour * 60 + minute;
+    }
     if (value.indexOf('오전') >= 0) return 0;
-    if (value.indexOf('오후') >= 0) return 1;
-    return 2;
+    if (value.indexOf('오후') >= 0) return 12 * 60;
+    return 24 * 60;
   }
   function statusRank(status){
     var index = STATUS_ORDER.indexOf(status);
