@@ -71,9 +71,22 @@ python3 tools/build_standalone.py
   `index.html` 에 검색 차단(`noindex, nofollow`)을 넣어 두었지만, 완전한 보호는 아닙니다.
   필요하면 ① 깃허브 Pro에서 비공개 저장소 + Pages, ② 일정에서 전화번호·메모를 빼고 쓰기, ③ 링크를 본인만 보관하는 방법 중에서 고르세요.
 
-## 배포 (저장소가 아직 없을 때)
+## 배포 현황 (2026-11-20 기준)
+
+- 저장소: <https://github.com/hyunjoon4/master> (공개)
+- 실제 주소: **<https://hyunjoon4.github.io/master/>**
+- Pages 게시 브랜치: **`gh-pages`** (Settings → Pages → Deploy from a branch, `/ (root)`)
+  - Pickle의 GitHub 앱 권한으로는 Pages API를 쓸 수 없어, `gh-pages` 브랜치를 만들어 Pages가 자동으로 게시하게 한 상태입니다.
+  - **내용을 고친 뒤에는 `gh-pages` 로 푸시해야 사이트에 반영됩니다.** `main`·`(root)` 브랜치는 같은 내용의 사본입니다.
 
 ```bash
-gh repo create visit-map --public --source=. --remote=origin --push
-gh api -X POST repos/hyunjoon4/visit-map/pages -f 'source[branch]=main' -f 'source[path]=/'
+# 수정 → 검사 → 배포
+python3 tools/build_standalone.py && python3 tools/check_page.py
+git add -A && git commit -m "일정 갱신"
+git push origin HEAD:gh-pages && git push origin HEAD:main && git push origin 'HEAD:(root)'
 ```
+
+## 네이버 지도 키 기본값
+
+`index.html` 의 `DEFAULT_NAVER_KEY` 에 `v2wsje7uvd` 가 들어 있어, 처음 열면 바로 네이버 지도가 뜹니다.
+다른 키로 바꾸려면 ⚙ 설정 → 네이버 지도 키에 입력 후 저장, 기본 키를 끄려면 **키 삭제**(오픈스트리트맵으로 표시).
