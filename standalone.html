@@ -118,7 +118,8 @@ article.card.picked{border-color:#9ad9b5;background:#f6fdf9}
 
 /* ── 지도 ───────────────────────────────────────────── */
 #mapPanel{position:relative;overflow:hidden}
-#map{position:absolute;inset:0;background:#e6eef5}
+/* 네이버 지도 라이브러리가 #map 에 inline position:relative 를 넣어 높이가 0이 되는 문제 방지 */
+#map{position:absolute!important;inset:0;background:#e6eef5}
 .map-tools{position:absolute;top:10px;right:10px;display:flex;flex-direction:column;gap:6px;z-index:5}
 .map-tools button{
   width:40px;height:40px;display:grid;place-items:center;border:1px solid var(--line);border-radius:11px;
