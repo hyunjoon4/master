@@ -1,0 +1,1418 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f1c2e">
+<meta name="robots" content="noindex, nofollow">
+<title>방문 일정 지도</title>
+<style>
+:root{
+  color-scheme:light;
+  --ink:#14202f; --muted:#5c6b81; --line:#dde4ee; --surface:#ffffff; --canvas:#f2f5f9;
+  --accent:#03a94f; --accent-ink:#014d24; --accent-soft:#e6f8ee;
+  --red:#c92235; --blue:#1756b9; --wait:#9a5b00; --wait-bg:#fff2d9;
+  --shadow:0 1px 2px rgba(16,32,56,.06),0 8px 24px rgba(16,32,56,.06);
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0; background:var(--canvas); color:var(--ink); display:flex; flex-direction:column;
+  height:100vh; height:100svh; overflow:hidden;
+  font:15px/1.45 -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic","Segoe UI",system-ui,sans-serif;
+  -webkit-text-size-adjust:100%; -webkit-tap-highlight-color:transparent;
+}
+h1,h2,h3,p{margin:0}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+a{color:var(--blue)}
+[hidden]{display:none!important}
+:where(button,a,input,select,summary,[tabindex]):focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* ── 상단 바 ─────────────────────────────────────────── */
+.topbar{flex:0 0 auto;background:var(--surface);border-bottom:1px solid var(--line);padding:calc(8px + env(safe-area-inset-top)) 12px 8px}
+.topbar-row{display:flex;align-items:center;gap:10px}
+.brand{display:flex;align-items:baseline;gap:8px;min-width:0}
+.brand h1{font-size:17px;letter-spacing:-.02em;white-space:nowrap}
+.brand .today{font-size:12.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.spacer{flex:1}
+.icon-button{
+  display:inline-flex;align-items:center;gap:5px;border:1px solid var(--line);background:var(--surface);
+  border-radius:9px;padding:6px 9px;font-size:12.5px;font-weight:600;color:var(--muted)
+}
+.banner{
+  display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px;padding:8px 10px;border-radius:10px;
+  background:var(--wait-bg);color:#57370a;font-size:12.5px;line-height:1.4
+}
+.banner.ok{background:var(--accent-soft);color:var(--accent-ink)}
+.banner.bad{background:#fdecef;color:#7d1220}
+.banner button{border:1px solid currentColor;background:transparent;border-radius:8px;padding:4px 8px;font-size:12px;font-weight:700;color:inherit}
+.banner .banner-text{flex:1 1 200px;min-width:0}
+
+/* ── 필터 ───────────────────────────────────────────── */
+.filters{flex:0 0 auto;background:var(--surface);border-bottom:1px solid var(--line);padding:8px 12px 9px}
+.filter-row{display:flex;align-items:center;gap:8px;min-width:0}
+.filter-row + .filter-row{margin-top:7px}
+select.date-select{
+  appearance:none;border:1px solid var(--line);background:var(--surface) url("data:image/svg+xml;charset=utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%235c6b81' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat right 10px center;
+  border-radius:10px;padding:8px 28px 8px 11px;font-weight:700;font-size:14px;max-width:100%;min-width:0
+}
+.segmented{display:inline-flex;gap:3px;padding:3px;background:var(--canvas);border-radius:10px;flex:0 0 auto}
+.segmented button{border:0;background:transparent;border-radius:8px;padding:6px 10px;font-size:13px;font-weight:700;color:var(--muted);white-space:nowrap}
+.segmented button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 3px rgba(16,32,56,.14)}
+.counter{font-size:12.5px;color:var(--muted);white-space:nowrap;margin-left:auto}
+.chips{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.chips::-webkit-scrollbar{display:none}
+.chip{
+  flex:0 0 auto;border:1px solid var(--line);background:var(--surface);border-radius:999px;
+  padding:5px 11px;font-size:12.5px;font-weight:700;color:var(--muted);white-space:nowrap
+}
+.chip[aria-pressed="true"]{background:var(--accent-soft);border-color:#a9e3c2;color:var(--accent-ink)}
+
+/* ── 본문 ───────────────────────────────────────────── */
+main{flex:1 1 auto;min-height:0;display:grid;grid-template-columns:minmax(320px,38%) minmax(0,1fr);gap:10px;padding:10px 12px 12px}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);min-height:0;min-width:0}
+#listPanel{display:flex;flex-direction:column;overflow:hidden}
+.list-head{flex:0 0 auto;display:flex;align-items:center;gap:8px;padding:9px 12px;border-bottom:1px solid var(--line);background:#fafbfd}
+.list-head h2{font-size:13px;color:var(--muted);font-weight:700;letter-spacing:.01em}
+.list-head .spacer{flex:1}
+.ghost{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:5px 9px;font-size:12px;font-weight:700;color:var(--muted)}
+.ghost:disabled{opacity:.45;cursor:default}
+.cards{flex:1 1 auto;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding:8px}
+.date-sep{font-size:12px;font-weight:800;color:var(--muted);letter-spacing:.03em;padding:8px 4px 6px;position:sticky;top:0;background:var(--surface);z-index:1}
+article.card{border:1px solid var(--line);border-radius:12px;padding:10px 11px 11px;margin-bottom:8px;background:var(--surface);transition:border-color .12s,background .12s}
+article.card.picked{border-color:#9ad9b5;background:#f6fdf9}
+.card-top{display:flex;align-items:flex-start;gap:9px}
+.pick{flex:0 0 auto;display:flex;align-items:center;justify-content:center;width:30px;height:30px;border:1px solid var(--line);border-radius:9px;background:var(--surface);margin-top:-1px}
+.pick input{width:19px;height:19px;margin:0;accent-color:var(--accent)}
+.badge{
+  display:inline-grid;place-items:center;flex:0 0 auto;min-width:26px;height:26px;padding:0 6px;border-radius:13px;
+  background:var(--red);color:#fff;font-size:12.5px;font-weight:800;margin-top:2px
+}
+.badge[hidden]{display:none}
+.card-main{flex:1 1 auto;min-width:0}
+.card-title{display:flex;align-items:baseline;gap:7px;flex-wrap:wrap}
+.card-title h3{font-size:15.5px;font-weight:800;letter-spacing:-.01em;overflow-wrap:anywhere}
+.meta{font-size:12.5px;color:var(--muted);margin-top:2px;overflow-wrap:anywhere}
+.tag{display:inline-block;border-radius:999px;padding:1px 8px;font-size:11.5px;font-weight:800;background:#eef2f8;color:#3d4d64;vertical-align:1px}
+.tag.wait{background:var(--wait-bg);color:var(--wait)}
+.tag.manage{background:#e8f0fe;color:#15489c}
+.tag.done{background:var(--accent-soft);color:var(--accent-ink)}
+.tag.reject{background:#f1f2f5;color:#6c7787}
+.addr{display:flex;align-items:center;gap:6px;margin-top:7px;font-size:13.5px;overflow-wrap:anywhere}
+.addr a{text-decoration:none;border-bottom:1px solid #c9d9f0}
+.near{font-size:11.5px;color:var(--wait);font-weight:700}
+.memo{margin-top:6px;font-size:13px;color:#3c4b60;line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
+.memo.open{-webkit-line-clamp:unset;display:block}
+.history{margin-top:5px;font-size:12.5px;color:var(--muted);overflow-wrap:anywhere}
+.history b{color:#3c4b60;font-weight:700}
+.card-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:9px}
+.act{
+  display:inline-flex;align-items:center;gap:5px;border:1px solid var(--line);border-radius:9px;
+  padding:6px 10px;font-size:12.5px;font-weight:700;text-decoration:none;color:var(--ink);background:var(--surface);min-height:34px
+}
+.act.call{background:var(--accent-soft);border-color:#a9e3c2;color:var(--accent-ink)}
+.act.map{color:var(--blue);border-color:#c9d9f0}
+.more{margin-top:5px;border:0;background:none;padding:0;font-size:12px;font-weight:700;color:var(--blue)}
+.empty{padding:26px 10px;text-align:center;color:var(--muted);font-size:13.5px;line-height:1.6;white-space:pre-line}
+
+/* ── 지도 ───────────────────────────────────────────── */
+#mapPanel{position:relative;overflow:hidden}
+#map{position:absolute;inset:0;background:#e6eef5}
+.map-tools{position:absolute;top:10px;right:10px;display:flex;flex-direction:column;gap:6px;z-index:5}
+.map-tools button{
+  width:40px;height:40px;display:grid;place-items:center;border:1px solid var(--line);border-radius:11px;
+  background:rgba(255,255,255,.96);box-shadow:var(--shadow);font-size:17px;line-height:1
+}
+.map-tools button:disabled{opacity:.5}
+.map-status{
+  position:absolute;left:10px;bottom:10px;right:66px;z-index:5;font-size:12px;line-height:1.35;
+  background:rgba(255,255,255,.95);border:1px solid var(--line);border-radius:10px;padding:7px 10px;color:#33445c;
+  box-shadow:var(--shadow);max-width:520px
+}
+.map-status[hidden]{display:none}
+.map-fallback{position:absolute;inset:0;display:grid;place-items:center;padding:24px;text-align:center;color:var(--muted);font-size:13.5px;line-height:1.6}
+.pin{
+  display:grid;place-items:center;min-width:28px;height:28px;padding:0 6px;background:var(--red);color:#fff;
+  border:2px solid #fff;border-radius:14px;box-shadow:0 2px 6px rgba(20,32,56,.35);font-size:12.5px;font-weight:800;white-space:nowrap
+}
+.pin.current{background:var(--blue)}
+.popup{padding:10px 12px;max-width:260px;font:13px/1.5 -apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;color:#14202f}
+.popup strong{display:block;font-size:14px;margin-bottom:2px}
+.popup p{margin:2px 0;color:#4a5a70}
+.popup .links{display:flex;gap:8px;margin-top:6px;flex-wrap:wrap}
+.popup a{color:#1756b9;font-weight:700}
+
+/* ── 하단 탭 (모바일) ───────────────────────────────── */
+.tabbar{display:none;flex:0 0 auto;background:var(--surface);border-top:1px solid var(--line);padding:6px 8px calc(6px + env(safe-area-inset-bottom));gap:6px}
+.tabbar button{
+  flex:1;display:inline-flex;align-items:center;justify-content:center;gap:6px;border:0;background:transparent;
+  border-radius:11px;padding:9px 10px;font-size:13.5px;font-weight:800;color:var(--muted)
+}
+.tabbar button[aria-pressed="true"]{background:var(--accent-soft);color:var(--accent-ink)}
+.tabbar .count{font-weight:800;font-size:12px;color:inherit;opacity:.75}
+
+/* ── 설정 패널 ──────────────────────────────────────── */
+.settings{
+  position:absolute;inset:calc(8px + env(safe-area-inset-top)) 8px auto auto;z-index:30;width:min(380px,calc(100% - 16px));
+  background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:0 18px 50px rgba(16,32,56,.22);padding:14px
+}
+.settings h2{font-size:14px;margin-bottom:2px}
+.settings .hint{font-size:12px;color:var(--muted);line-height:1.5}
+.settings fieldset{border:0;margin:12px 0 0;padding:0;display:flex;flex-direction:column;gap:7px}
+.settings legend{font-size:12.5px;font-weight:800;color:#33445c;padding:0}
+.settings input[type=text],.settings input[type=url],.settings input[type=password]{
+  width:100%;border:1px solid var(--line);border-radius:9px;padding:9px 10px;font-size:13.5px;background:#fbfcfe
+}
+.settings .row{display:flex;gap:6px;flex-wrap:wrap}
+.settings .row button{border:1px solid var(--line);background:var(--surface);border-radius:9px;padding:8px 11px;font-size:12.5px;font-weight:700}
+.settings .row button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.settings .row button.warn{color:#8a2130;border-color:#efc6cd}
+.settings .note{font-size:11.5px;color:var(--muted);line-height:1.5}
+.settings-head{display:flex;align-items:center;gap:8px}
+.settings-head .spacer{flex:1}
+.file-label{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:9px;padding:8px 11px;font-size:12.5px;font-weight:700;cursor:pointer}
+.file-label input{display:none}
+
+@media(max-width:800px){
+  .brand h1{font-size:16px}
+  main{grid-template-columns:1fr;padding:0;gap:0}
+  .panel{border-radius:0;border-left:0;border-right:0;box-shadow:none}
+  #mapPanel{border:0}
+  #listPanel{border:0;border-top:1px solid var(--line)}
+  body[data-view="map"] #listPanel,body[data-view="list"] #mapPanel{display:none}
+  .tabbar{display:flex}
+  .cards{padding:8px 10px 16px}
+  .map-status{right:60px;font-size:11.5px;padding:6px 9px}
+  .filters{padding:7px 10px 8px}
+  .topbar{padding-left:10px;padding-right:10px}
+  .act{min-height:38px}
+}
+@media(min-width:801px){
+  .tabbar{display:none!important}
+}
+</style>
+</head>
+<body data-view="map">
+<script type="application/json" id="inlineSchedule">{"meta":{"source":"디앤씨 영업부 박현준 차장 스케줄 및 이력등록","spreadsheetId":"1MaoyT00LPV5iQmlJYvMn8X8ynyYe4GZu50xVP5u5ArQ","csv":"schedule.csv","generatedAt":"2026-11-20 05:53","count":174,"withCoordinates":174,"skipped":{"empty":260,"unavailable":7}},"items":[{"id":"r001","row":2,"date":"2026-09-17","dateLabel":"9월 17일","time":"오전중","db":"특관자경정","name":"부자전기","area":"충청남도서천군","phone":"041-951-3611","address":"충청남도 서천군 한산면 한마로 68-1","memo":"대표랑 통화, 마지막에 반응 없어서 통보식으로 접수, 대표의 아들과 딸이 고용산재 보험 가입했고 최근 3년동안 고용산재 보험료 납부했다고함/특관자경정 접수","status":"조회완료거절","history":"건설업, 대상세액없음","lat":36.086332,"lng":126.803278},{"id":"r002","row":3,"date":"2026-09-17","dateLabel":"9월 17일","time":"오전중","db":"특관자경정","name":"블루핸즈장항점","area":"충청남도서천군","phone":"041-956-1010","address":"충청남도 서천군 장항읍 장서로44번길 1","memo":"여관리자와 통화, 마지막에 반응 없어서 통보식으로 접수, 대표의 형제가 고용산재 보험 가입했고 최근 3년동안 고용산재 보험료 납부했다고함/특관자경정 접수","status":"계약완료","history":"특관자 계약완료","lat":36.011744,"lng":126.698665},{"id":"r003","row":4,"date":"2026-09-17","dateLabel":"9월 17일","time":"오후중","db":"경정","name":"르노코리아서비스 자동차서비스 한일부분정비공업사","area":"충청남도서천군","phone":"041-953-0967","address":"충남 서천군 서천읍 사곡로 111","memo":"남관리자와 통화, 무난하게 방문에 동의함, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"거절","history":"기장에서 경정완료했다고하심","lat":36.083778,"lng":126.694813},{"id":"r004","row":5,"date":"2026-09-18","dateLabel":"9월 18일","time":"오전중","db":"특관자경정","name":"최정자명품소곡주","area":"충청남도서천군","phone":"041-951-0048","address":"충청남도 서천군 한산면 충절로 1134","memo":"대표랑 통화, 무난하게 방문에 동의함, 대표의 며느리가 고용산재 보험 가입했고 최근 3년동안 고용산재 보험료 납부했다고함/특관자경정 접수","status":"거절","history":"필요없다고 하심","lat":36.081096,"lng":126.803829},{"id":"r005","row":6,"date":"2026-09-18","dateLabel":"9월 18일","time":"오전중","db":"경정","name":"용성화학","area":"충청남도서천군","phone":"041-952-7771","address":"충청남도 서천군 마서면 원한성길 101-1","memo":"대표랑 통화, 무난하게 방문에 동의함, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"계약완료","history":"특관자 계약완료","lat":36.08081,"lng":126.638164},{"id":"r006","row":7,"date":"2026-09-18","dateLabel":"9월 18일","time":"오후중","db":"경정","name":"네이처컬렉션서천점","area":"충청남도서천군","phone":"041-952-6751","address":"충청남도 서천군 서천읍 서천로 147 , 105호","memo":"대표랑 통화, 무난하게 방문에 동의함, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"조회완료거절","history":"특관자없음, 소액으로 실익없음","lat":36.081207,"lng":126.686739},{"id":"r007","row":8,"date":"2026-09-21","dateLabel":"9월 21일","time":"오전중","db":"경정","name":"대보종합에너지","area":"충청남도보령시","phone":"041-935-8850","address":"충청남도 보령시 남포면 봉덕삼현길 221","memo":"대표랑 통화, 처음에 지원금 안받겠다해서 대출 아니고 지원금이고 안내만 일단 받아보라하니 방문에 동의함, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"거절","history":"타사에서 경정진행중이라고하심","lat":36.319284,"lng":126.58299},{"id":"r008","row":9,"date":"2026-09-21","dateLabel":"9월 21일","time":"오전중","db":"경정","name":"못난이강정","area":"충청남도보령시","phone":"041-934-3835","address":"충청남도 보령시 대천항로 382","memo":"대표랑 통화, 무난하게 방문에 동의함, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"거절","history":"기장에서 경정도하고있어서 필요없다고하심","lat":36.327805,"lng":126.505562},{"id":"r009","row":10,"date":"2026-09-21","dateLabel":"9월 21일","time":"오후중","db":"경정","name":"고은수산","area":"충청남도보령시","phone":"041-934-4327","address":"충청남도 보령시 새마을1길 54","memo":"대표랑 통화, 마지막에 반응 없어서 통보식으로 접수, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"관리","history":"특관자 처남1명 있음 명절지나고 다시 연락하기로함","lat":36.308375,"lng":126.517531},{"id":"r010","row":11,"date":"2026-09-22","dateLabel":"9월 22일","time":"오전중","db":"경정","name":"비채충청총판","area":"충청남도보령시","phone":"041-935-2747","address":"충청남도 보령시 주교면 울계큰길 496-1","memo":"대표랑 통화, 다른일로 오는거 아니냐 해서 고용지원금에 대해서만 안내한다고했고 마지막엔 반응없어서 통보식으로 접수, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"거절","history":"다른데서 조회해봤는데 받을꺼없다고하심","lat":36.394279,"lng":126.568254},{"id":"r011","row":12,"date":"2026-09-22","dateLabel":"9월 22일","time":"오전중","db":"경정","name":"코오롱스포츠 보령대천점","area":"충청남도보령시","phone":"041-932-1753","address":"충청남도 보령시 중앙로 80","memo":"대표랑 통화, 무난하게 방문에 동의함, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"조회완료거절","history":"효과없음","lat":36.350796,"lng":126.595602},{"id":"r012","row":13,"date":"2026-09-22","dateLabel":"9월 22일","time":"오후중","db":"경정","name":"현성엔지니어링","area":"충청남도보령시","phone":"041-935-5221","address":"충청남도 보령시 대청로 329","memo":"여직원과 통화, 마지막에 통보식으로 접수, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"거절","history":"필요없다고 하심","lat":36.367149,"lng":126.622976},{"id":"r013","row":14,"date":"2026-09-23","dateLabel":"9월 23일","time":"오전중","db":"경정","name":"대천축산물도소매센터","area":"충청남도보령시","phone":"041-934-1128","address":"충남 보령시 번영로 32","memo":"대표랑 통화, 마지막에 크게 반응 없어서 통보식으로 접수, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"거절","history":"기장에서 하고있다고 거절하심","lat":36.351413,"lng":126.59264},{"id":"r014","row":15,"date":"2026-09-23","dateLabel":"9월 23일","time":"오전중","db":"경정","name":"케이와이판넬","area":"충청남도부여군","phone":"041-837-4917","address":"충청남도 부여군 규암면 흥수로456번길 72 농업기술센터옆 드론연습장 밑으로 내려오시면됩니다","memo":"남직원과 통화, 무난하게 방문에 동의함, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"관리","history":"명절전 바쁘니 지나고 다시연락하기로함 오라고한적은없다고하심","lat":36.257794,"lng":126.841311},{"id":"r015","row":16,"date":"2026-09-23","dateLabel":"9월 23일","time":"오전중","db":"경정","name":"반산기획","area":"충청남도부여군","phone":"041-836-4134","address":"충청남도 부여군 규암면 흥수로 885","memo":"대표랑 통화, 무난하게 방문에 동의함, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"계약완료","history":"특관자 1명있음 계약완료, 서류추후 보내주신다고 하심","lat":36.274581,"lng":126.878926},{"id":"r016","row":17,"date":"2026-09-23","dateLabel":"9월 23일","time":"오후중","db":"경정","name":"디씨킹마트","area":"충청남도부여군","phone":"041-832-5027","address":"충남 부여군 부여읍 성왕로 346","memo":"대표랑 통화, 무난하게 방문에 동의함, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 3명 있다고함/간단접수","status":"조회완료거절","history":"경정 계약완료 / 승계 미반영 상태로 경정 인용됨 , 과다 공제 받음","lat":36.283562,"lng":126.925434},{"id":"r017","row":18,"date":"2026-09-28","dateLabel":"9월 28일","time":"오전중","db":"특관자경정","name":"석성농산물유통영농조합법인","area":"충청남도부여군","phone":"041-836-6526","address":"충청남도 부여군 석성면 석성북로 11","memo":"대표랑 통화, 마지막에 반응없어서 통보식으로 접수, 대표의 아들이 고용산재 보험 가입했고 최근 3년동안 고용산재 보험료 납부했다고함/특관자경정 접수","status":"거절","history":"명절앞뒤라너무바쁘심 10월2일에 다시방문요청/다시 방문했으나 조회할생각없다고 하심","lat":36.224952,"lng":126.99038},{"id":"r018","row":19,"date":"2026-09-28","dateLabel":"9월 28일","time":"오전중","db":"경정","name":"나들가게 평화마트","area":"충청남도부여군","phone":"041-835-0836","address":"충청남도 부여군 부여읍 성왕로352번길 14","memo":"대표랑 통화, 마지막에 지원금 필요 없다해서 일단 안내만 받아봐도 되는 내용이라 하니까 방문에 동의함,남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"관리","history":"대표부재 추후재연락","lat":36.282718,"lng":126.925982},{"id":"r019","row":20,"date":"2026-09-28","dateLabel":"9월 28일","time":"오후중","db":"경정","name":"레노마정장 롯데아울렛 부여점","area":"충청남도부여군","phone":"041-435-2656","address":"충청남도 부여군 규암면 백제문로 387","memo":"대표랑 통화, 무난하게 방문에는 동의함, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원이 확실하진 않으나 있었던거 같다고함/간단접수","status":"계약완료","history":"익일까지 점장부재 추후재연락/11월4일 조회완료","lat":36.307214,"lng":126.901966},{"id":"r020","row":21,"date":"2026-09-29","dateLabel":"9월 29일","time":"오전중","db":"경정","name":"대덕도매마트","area":"대전동구","phone":"042-256-7496","address":"대전 동구 대전로785번길 30","memo":"대표랑 통화, 무난하게 방문에 동의함, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"조회완료거절","history":"한도없음","lat":36.329348,"lng":127.431824},{"id":"r021","row":22,"date":"2026-09-29","dateLabel":"9월 29일","time":"오전중","db":"경정","name":"충남전기이엔지","area":"대전동구","phone":"042-635-3939","address":"대전광역시 동구 대전로 974","memo":"여직원과 통화, 마지막에 통보식으로 접수, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"거절","history":"필요없다하심","lat":36.343663,"lng":127.422211},{"id":"r022","row":23,"date":"2026-09-29","dateLabel":"9월 29일","time":"오후중","db":"경정","name":"대전탑산업","area":"대전동구","phone":"042-635-3677","address":"대전광역시 동구 동대전로 307","memo":"대표랑 통화, 마지막에 지금 바쁘고 추후 검토하고 연락주겠다해서 일단 접수함, 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"관리","history":"오늘은 안된다고하심 익일 재연락예정","lat":36.348021,"lng":127.443738},{"id":"r023","row":24,"date":"2026-09-30","dateLabel":"9월 30일","time":"오전중","db":"경정","name":"건국카센타 카멘샵","area":"대전동구","phone":"042-285-1294","address":"대전광역시 동구 옥천로 56-1","memo":"대표랑 통화, 마지막에 반응 없어서 통보식으로 접수, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"거절","history":"최근 기장바꾸면서 확인해봤다고하심","lat":36.319717,"lng":127.447176},{"id":"r024","row":25,"date":"2026-09-30","dateLabel":"9월 30일","time":"오전중","db":"경정","name":"종로아크릴","area":"대전동구","phone":"042-625-4725","address":"대전광역시 동구 선화로 196-1","memo":"여직원과 통화, 마지막에 통보식으로 접수, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"거절","history":"필요없다고하심","lat":36.333747,"lng":127.427478},{"id":"r025","row":26,"date":"2026-09-30","dateLabel":"9월 30일","time":"오후중","db":"경정","name":"일광제과공업사","area":"대전동구","phone":"042-623-1947","address":"대전광역시 동구 동광장로 10","memo":"대표랑 통화, 마지막에 통보식으로 접수, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"거절","history":"25년도까지 받았다고하심","lat":36.329285,"lng":127.43993},{"id":"r026","row":27,"date":"2026-10-01","dateLabel":"10월 1일","time":"오전중","db":"경정","name":"남광사무용가구","area":"대전동구","phone":"042-283-0501","address":"대전광역시 동구 모암로 128-6","memo":"대표의 아내와 통화, 마지막에 반응 없어서 통보식으로 접수, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있었다고함/간단접수","status":"조회완료거절","history":"환급액없음","lat":36.294341,"lng":127.444802},{"id":"r027","row":28,"date":"2026-10-01","dateLabel":"10월 1일","time":"오전중","db":"특관자경정","name":"형제인테리어뱅크","area":"대전동구","phone":"042-627-1420","address":"대전광역시 동구 삼성시장2길 43","memo":"대표랑 통화, 대표의 아들이 고용산재 보험 가입했고 최근 3년동안 고용산재 보험료 납부했다고함/특관자경정 접수","status":"거절","history":"필요없다고하심","lat":36.338054,"lng":127.4303},{"id":"r028","row":29,"date":"2026-10-01","dateLabel":"10월 1일","time":"오후중","db":"경정","name":"성우상사","area":"대전동구","phone":"042-283-8263","address":"대전광역시 동구 대전로 693","memo":"대표랑 통화, 무난하게 방문에 동의함, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"관리","history":"직원 딸한명 나중에 재연락하기로함","lat":36.322071,"lng":127.437352},{"id":"r029","row":30,"date":"2026-10-02","dateLabel":"10월 2일","time":"오전중","db":"경정","name":"돈우마당축산물백화점","area":"대전중구","phone":"042-221-6664","address":"대전광역시 중구 보문로48번길 16","memo":"대표랑 통화, 마지막에 반응 없어서 통보식으로 접수, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"계약완료","history":"","lat":36.314119,"lng":127.435254},{"id":"r030","row":31,"date":"2026-10-02","dateLabel":"10월 2일","time":"오전중","db":"경정","name":"태전마트 대사점","area":"대전중구","phone":"042-252-0041","address":"대전광역시 중구 계룡로 931 솔리안시티","memo":"대표랑 통화, 마지막에 반응 없어서 통보식으로 접수, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"거절","history":"인수한지6개월밖에 안되심","lat":36.31995,"lng":127.41617},{"id":"r031","row":32,"date":"2026-10-02","dateLabel":"10월 2일","time":"오후중","db":"특관자경정","name":"천일광고기획","area":"대전중구","phone":"042-254-5047","address":"대전광역시 중구 용두로 17-2","memo":"대표랑 통화, 무난하게 방문에 동의함, 대표의 아들이 고용산재 보험 가입했고 최근 3년동안 고용산재 보험료 납부했다고함/특관자경정 접수","status":"거절","history":"아들고용산재 미가입,세금거의 안낸다고하심","lat":36.326167,"lng":127.409629},{"id":"r032","row":33,"date":"2026-10-06","dateLabel":"10월 6일","time":"오전중","db":"경정","name":"비앤비 치과기공소","area":"대전중구","phone":"042-581-2879","address":"대전광역시 중구 태평로 35 동양버드내마을 2단지 상가동 B08호","memo":"대표랑 통화, 무난하게 방문에 동의함, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있었다고함/간단접수","status":"거절","history":"기장에서 조회해봤을때 받을꺼없었다고하심, 특관자 없음","lat":36.320465,"lng":127.392511},{"id":"r033","row":34,"date":"2026-10-06","dateLabel":"10월 6일","time":"오전중","db":"경정","name":"한진PVC상사","area":"대전중구","phone":"042-271-6599","address":"대전광역시 중구 대종로 259","memo":"대표랑 통화, 무난하게 방문에 동의함, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있었다고함/간단접수","status":"거절","history":"필요없다고하심 직원도 없다고하심","lat":36.31066,"lng":127.438993},{"id":"r034","row":35,"date":"2026-10-06","dateLabel":"10월 6일","time":"오후중","db":"경정","name":"시민금속산업","area":"대전중구","phone":"042-484-5222","address":"대전광역시 중구 대종로 270","memo":"대표랑 통화, 수수료 줘야 되는거냐 등 내용 어느정도 알고있는듯함, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"계약완료","history":"","lat":36.311802,"lng":127.438384},{"id":"r035","row":36,"date":"2026-10-07","dateLabel":"10월 7일","time":"오전중","db":"경정","name":"목양농장정육점","area":"대전중구","phone":"042-242-0247","address":"대전광역시 중구 목동로 37","memo":"대표랑 통화, 재콜로 접수, 무난하게 방문에 동의함, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"거절","history":"필요없다하심","lat":36.334942,"lng":127.404965},{"id":"r036","row":37,"date":"2026-10-07","dateLabel":"10월 7일","time":"오전중","db":"경정","name":"크로스팜","area":"대전중구","phone":"042-252-0506","address":"대전광역시 중구 계룡로 922","memo":"대표랑 통화, 마지막에 통보식으로 접수, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"거절","history":"필요없다고하심 오라고한적도없다심","lat":36.320117,"lng":127.414519},{"id":"r037","row":38,"date":"2026-10-07","dateLabel":"10월 7일","time":"오후중","db":"경정","name":"현대모비스현대부품대리점 삼화상회","area":"대전중구","phone":"042-255-8595","address":"대전광역시 중구 대종로 321-1","memo":"대표랑 통화, 마지막에 통보식으로 접수, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"거절","history":"기장에서 경정 한다고하심","lat":36.314456,"lng":127.433817},{"id":"r038","row":39,"date":"2026-10-08","dateLabel":"10월 8일","time":"오전중","db":"특관자경정","name":"금오에너지","area":"대전중구","phone":"042-253-0090","address":"대전광역시 중구 태평로93번길 72","memo":"대표랑 통화, 무난하게 방문에 동의함, 대표의 어머니가 고용산재 보험 가입했고 최근 3년동안 고용산재 보험료 납부했다고함/특관자경정 접수","status":"조회완료거절","history":"근로자없음","lat":36.325551,"lng":127.390467},{"id":"r039","row":40,"date":"2026-10-08","dateLabel":"10월 8일","time":"오전중","db":"경정","name":"서아종합건재","area":"대전중구","phone":"042-582-7721","address":"대전광역시 중구 안영로22번길 40","memo":"대표랑 통화, 무난하게 방문에 동의함, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있었다고함/간단접수","status":"관리","history":"한도발생 몇일만더 고민해보고 진행한다고하심/10월20일 통화했을때 아직못알아봤다고 다시 연락하기로함","lat":36.290141,"lng":127.380215},{"id":"r040","row":41,"date":"2026-10-08","dateLabel":"10월 8일","time":"오후중","db":"경정","name":"노루페인트 대전점","area":"대전중구","phone":"042-256-1032","address":"대전광역시 중구 대종로 246","memo":"대표랑 통화, 마지막에 통보식으로 접수, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"거절","history":"직원없음 조회거절","lat":36.310545,"lng":127.440643},{"id":"r041","row":42,"date":"2026-10-12","dateLabel":"10월 12일","time":"오전중","db":"경정","name":"수할인마트","area":"대전중구","phone":"042-526-6665","address":"대전광역시 중구 당디로 80","memo":"대표랑 통화, 마지막에 통보식으로 접수, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"거절","history":"직원없음 조회해봤는데 받을꺼없었다고하심","lat":36.312108,"lng":127.392559},{"id":"r042","row":43,"date":"2026-10-12","dateLabel":"10월 12일","time":"오전중","db":"경정","name":"합동부속상사","area":"대전중구","phone":"042-252-3700","address":"대전광역시 중구 문창로 118-1","memo":"대표랑 통화, 무난하게 방문에 동의함, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"거절","history":"직원없음 필요없다고하심","lat":36.323418,"lng":127.431266},{"id":"r043","row":44,"date":"2026-10-12","dateLabel":"10월 12일","time":"오후중","db":"경정","name":"우리축산물센터","area":"대전중구","phone":"042-255-8040","address":"대전광역시 중구 목동로 42","memo":"대표랑 통화, 마지막에 통보식으로 접수, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있었다고함/간단접수","status":"거절","history":"특관자 아들 있음 좀알아보고 연락준다고하심/특관자 경정 안한다고 하심","lat":36.334762,"lng":127.40754},{"id":"r044","row":45,"date":"2026-10-12","dateLabel":"10월 12일","time":"오후중","db":"경정","name":"메이커힐","area":"대전중구","phone":"0507-1391-7327","address":"대전광역시 중구 중앙로 116 5층 506호","memo":"대표님통화, 무난히 방문하라 하심/ 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"조회완료거절","history":"한도부족","lat":36.327232,"lng":127.422773},{"id":"r045","row":46,"date":"2026-10-12","dateLabel":"10월 12일","time":"오후중","db":"경정","name":"빵담아","area":"대전중구","phone":"042-522-5385","address":"대전 중구 태평로 71 삼부프라자","memo":"대표님 통화, 무난히 방문하라 하심/ 1년된 4대보험 직원 있다고함/간단접수","status":"거절","history":"대표부재/10월21일 필요없다고하심","lat":36.323304,"lng":127.393401},{"id":"r046","row":47,"date":"2026-10-13","dateLabel":"10월 13일","time":"오전중","db":"경정","name":"유명종합공사","area":"대전중구","phone":"042-274-7704","address":"대전광역시 중구 유천로 57-32","memo":"대표통화 - 19년 이후 채용, 1년이상근무 충족- 남인 직원 - 오전에 오라 하심","status":"관리","history":"부재 가게문닫혀있음","lat":36.317569,"lng":127.396382},{"id":"r047","row":48,"date":"2026-10-13","dateLabel":"10월 13일","time":"오전중","db":"경정","name":"안경나라 산성점","area":"대전중구","phone":"042-586-2012","address":"대전광역시 중구 보문산로 55","memo":"대표통화- 지자체이냐? 왜 전화로 하냐? 질문 있었으나, 안내후 이해하심.- 1년근무. 19년 이후 가족 아님 채용직원 있다하심","status":"관리","history":"대표휴무라고하심 다른날다시 방문하기로함","lat":36.30488,"lng":127.386541},{"id":"r048","row":49,"date":"2026-10-13","dateLabel":"10월 13일","time":"오후중","db":"경정","name":"홈마트","area":"대전중구","phone":"042-522-4113","address":"대전광역시 중구 평촌로105번길 52-7","memo":"대표통화, 아무때나 오라시며 긍정적임. 단 다른 곳에서도 이거 해 준다 한거 같은데? 하심 그래도 우리측에서 다 설명 드리고 해 드린다 설명함.","status":"거절","history":"경정 했음","lat":36.325261,"lng":127.39794},{"id":"r049","row":50,"date":"2026-10-13","dateLabel":"10월 13일","time":"오후중","db":"경정","name":"버드네정육백화점","area":"대전중구","phone":"042-535-4420","address":"대전광역시 중구 태평2동 422-7","memo":"대표님배우자님 통화, 무난히 방문하라 하심/ 1년쯤 된것 같은 4대보험 직원 있다고함/간단접수","status":"거절","history":"필요없다고 하심 직원없음","lat":36.32073,"lng":127.39073,"geoApprox":true},{"id":"r050","row":51,"date":"2026-10-14","dateLabel":"10월 14일","time":"오전중","db":"경정","name":"우남환경화학","area":"대전대덕구","phone":"042-637-5080","address":"대전광역시 대덕구 대화로 167","memo":"대표랑 통화, 마지막에 통보식으로 접수, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"승인/진행거절","history":"이모부가 세무사라 확인좀해보고 진행한다고하심","lat":36.363951,"lng":127.403089},{"id":"r051","row":52,"date":"2026-10-14","dateLabel":"10월 14일","time":"오전중","db":"특관자경정","name":"현대시보리","area":"대전대덕구","phone":"042-585-4235","address":"대전광역시 대덕구 방두말4길 31 B동 현대공업사","memo":"대표랑 통화, 무난하게 방문에 동의함, 대표의 아들이 고용산재 보험 가입했고 최근 3년동안 고용산재 보험료 납부했다고함/특관자경정 접수","status":"관리","history":"대표부재 오후에도 안계심 아들이 좀 알아보고 연락주기로하심","lat":36.428633,"lng":127.427848},{"id":"r052","row":53,"date":"2026-10-14","dateLabel":"10월 14일","time":"오전중","db":"특관자경정","name":"경남화학","area":"대전대덕구","phone":"042-635-6350","address":"대전광역시 대덕구 대덕대로1447번길 59-4","memo":"대표랑 통화, 무난하게 방문에 동의함, 대표의 5촌이 고용산재 보험 가입했고 최근 3년동안 고용산재 보험료 납부했다고함/특관자경정 접수","status":"조회완료거절","history":"한도부족","lat":36.450488,"lng":127.407764},{"id":"r053","row":54,"date":"2026-10-14","dateLabel":"10월 14일","time":"오후중","db":"경정","name":"중리콜마트","area":"대전대덕구","phone":"042-626-7891","address":"대전 대덕구 중리남로 12","memo":"직원분 통화,/통보식전달/ 1년동안 4대보험 넣은 직원잇음, 가족아님/ 경정 / 간단접수","status":"거절","history":"필요없다고하심","lat":36.361482,"lng":127.43035},{"id":"r054","row":55,"date":"2026-10-14","dateLabel":"10월 14일","time":"오후중","db":"경정","name":"익산기전","area":"대전중구","phone":"042-585-8756","address":"대전광역시 중구 유등천동로292번길 69","memo":"직원통화- 19년 이후 채용. 1년 이상 근무. 남인 직원.","status":"거절","history":"기장에서 하고있다고 하심","lat":36.30795,"lng":127.388933},{"id":"r055","row":56,"date":"2026-10-14","dateLabel":"10월 14일","time":"오후중","db":"경정","name":"이미지안경 부사점","area":"대전중구","phone":"042-221-7848","address":"대전 중구 대종로 308 1층","memo":"대표님 통화, 무난히 방문하라 하심/ 1년된 4대보험 직원 있다고함/간단접수","status":"거절","history":"기장에서 경정한다고하심 특관자없음","lat":36.313492,"lng":127.434957},{"id":"r056","row":57,"date":"2026-10-15","dateLabel":"10월 15일","time":"오전중","db":"경정","name":"디에스이엔지","area":"대전대덕구","phone":"042-933-7501","address":"대전광역시 대덕구 상서당1길 52-3","memo":"대표랑 통화, 국가 기관이냐 등 세밀하게 물어봄, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"계약완료","history":"","lat":36.421188,"lng":127.421658},{"id":"r057","row":58,"date":"2026-10-15","dateLabel":"10월 15일","time":"오전중","db":"경정","name":"메타3","area":"대전대덕구","phone":"042-931-0332","address":"대전광역시 대덕구 신일서로67번길 56","memo":"대표랑 통화, 마지막에 통보식으로 접수, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"관리","history":"meta3jbp@gmail.com 01040214140 자료먼저 메일로 보냄/11월12일 연락했으나 무응답","lat":36.439463,"lng":127.408943},{"id":"r058","row":59,"date":"2026-10-15","dateLabel":"10월 15일","time":"오전중","db":"경정","name":"현대볼트","area":"대전대덕구","phone":"042-670-7366","address":"대전광역시 대덕구 대화로 160 산업용재유통상가 14동 115호","memo":"남직원과 통화, 마지막에 통보식으로 접수, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 많다고함/간단접수","status":"관리","history":"대표부재 추후재연락","lat":36.364885,"lng":127.402794},{"id":"r059","row":60,"date":"2026-10-15","dateLabel":"10월 15일","time":"오전중","db":"특관자경정","name":"대화할인마트","area":"대전대덕구","phone":"042-628-5003","address":"대전 대덕구 동심1길 35","memo":"대표님 배우자분 통화, 무난히 방문하라 하심/ 3년동안 고용.산재 가족 납부 /특관자경정 / 간단접수/오후엔 어디가신다 하십니다.","status":"진행거절","history":"특관자있음 세금문제로 가입되어있었는데 확인해보고 진행한다고하심/10월20일 재방문했으나 나중에 실업급여 받아야한다고 서류준비해놓는다고 하심","lat":36.362696,"lng":127.416007},{"id":"r060","row":61,"date":"2026-10-15","dateLabel":"10월 15일","time":"오후중","db":"경정","name":"대원도매유통","area":"대전대덕구","phone":"042-636-4506","address":"대전 대덕구 한밭대로988번길 46","memo":"직원분통화 통화, 무난히 방문하라 하심/ 1년동안 4대보험 넣은 직원잇음, 가족아님 / 경정 / 간단접수","status":"관리","history":"약속한적도없고 모르는거 상담하기싫다 다음주 연락하고 다시 일정잡기로함","lat":36.355663,"lng":127.409577},{"id":"r061","row":62,"date":"2026-10-15","dateLabel":"10월 15일","time":"오후중","db":"경정","name":"빽다방 대전송촌공원점","area":"대전대덕구","phone":"042-636-1400","address":"대전 대덕구 송촌북로16번길 58 동춘빌딩","memo":"\"직원분통화 통화, 무난히 방문하라 하심/ 1년동안 4대보험 넣은 직원잇음, 가족아님 / 경정 / 간단접수","status":"조회완료거절","history":"조회완료 수수료 협의중 / 정기신고 반영 및 과다적용 업장","lat":36.365001,"lng":127.439645},{"id":"r062","row":63,"date":"2026-10-15","dateLabel":"10월 15일","time":"오후중","db":"경정","name":"안경매니지먼트 신탄진점","area":"대전대덕구","phone":"042-933-9222","address":"대전 대덕구 대덕대로 1595","memo":"\"직원분 통화,/통보식전달/ 1년동안 4대보험 넣은 직원잇음, 가족아님/ 경정 / 간단접수\"","status":"거절","history":"기장에서 경정도한다고하심","lat":36.450573,"lng":127.425046},{"id":"r063","row":64,"date":"2026-10-16","dateLabel":"10월 16일","time":"오전중","db":"경정","name":"그루터기 사무용가구","area":"대전대덕구","phone":"042-933-5399","address":"대전광역시 대덕구 덕암로246번길 45 1층","memo":"대표랑 통화, 정확히 어디서 나오는거냐, 조건은 뭐냐등 살짝 미심쩍어함, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"거절","history":"직원1명 있고 직접조회는해보겠다고하심 /26일 필요없다고하심","lat":36.441788,"lng":127.427321},{"id":"r064","row":65,"date":"2026-10-16","dateLabel":"10월 16일","time":"오전중","db":"경정","name":"신우산업","area":"대전대덕구","phone":"042-933-2170","address":"대전광역시 대덕구 문평동로 65","memo":"남직원과 통화, 마지막에 통보식으로 접수, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"거절","history":"담당자 연차와 자리비움으로 상담어렵다심 다른 날 다시 약속잡고 오라고하심/10월21일 담당자통화 필요없다고 하심","lat":36.448525,"lng":127.397914},{"id":"r065","row":66,"date":"2026-10-16","dateLabel":"10월 16일","time":"오전중","db":"경정","name":"믿음정비공업사","area":"대전대덕구","phone":"042-637-1002","address":"대전 대덕구 아리랑로55번길 78","memo":"대표님 배우자분 통화, 무난히 방문하라 하심/ 1년동안 4대보험 넣은 직원잇음, 가족아님 / 경정 / 간단접수/","status":"관리","history":"대표 몸이안좋아 출근안했다심 다음주 연락후 재방문예정","lat":36.383542,"lng":127.413767},{"id":"r066","row":67,"date":"2026-10-16","dateLabel":"10월 16일","time":"오후중","db":"경정","name":"미정숯불갈비","area":"대전대덕구","phone":"0507-1411-8677","address":"대전 대덕구 선비마을로5번길 9 방주빌딩 1층","memo":"대표님 통화,/통보식전달/ 1년동안 4대보험 넣은 직원잇음, 가족아님/ 경정 / 간단접수","status":"승인/관리","history":"한도발생 조금알아보고 진행한다고하심/10월20일 아직 못알아봤다고 조금더시간달라고하심","lat":36.361959,"lng":127.445454},{"id":"r067","row":68,"date":"2026-10-16","dateLabel":"10월 16일","time":"오후중","db":"경정","name":"다비치안경 중리네거리점","area":"대전대덕구","phone":"0507-1339-3931","address":"대전 대덕구 계족로 536 1~2층","memo":"직원분 통화,/통보식전달/ 1년동안 4대보험 넣은 직원잇음, 가족아님/ 경정 / 간단접수","status":"거절","history":"필요없다고하심","lat":36.359511,"lng":127.432587},{"id":"r068","row":69,"date":"2026-10-19","dateLabel":"10월 19일","time":"오전중","db":"경정","name":"제일연마공업 대전대리점","area":"대전대덕구","phone":"042-634-4530","address":"대전광역시 대덕구 오정로75번길 54","memo":"여직원과 통화, 마지막에 어디냐고 물어봐서 중소기업지원센터라고 안내하고 통보식으로 접수, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"거절","history":"다른데서 이미 하셨다고하심","lat":36.351613,"lng":127.407492},{"id":"r069","row":70,"date":"2026-10-19","dateLabel":"10월 19일","time":"오전중","db":"경정","name":"한결유통","area":"대전대덕구","phone":"042-635-4777","address":"대전광역시 대덕구 신탄진로232번길 90","memo":"대표랑 통화, 무슨 지원금 주는 거냐 등 호기심 보임, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"관리","history":"지금은 바쁘고 나중에 연락주신다고하심/21일 시간될때 홈페이지에서 직접조회해보겠다고하심/","lat":36.401127,"lng":127.427631},{"id":"r070","row":71,"date":"2026-10-19","dateLabel":"10월 19일","time":"오전중","db":"경정","name":"왕룽숯불갈비","area":"대전대덕구","phone":"042-625-4105","address":"대전 대덕구 비래서로 89","memo":"대표님 통화,/무난히 오라함/ 1년동안 4대보험 넣은 직원잇음, 가족아님/ 경정 / 간단접수","status":"거절","history":"바빠서 다음에다시연락하기로함/10월20일 재연락했으나 급한일때문에 안된다고하심 21일 재연락예정/29일 연락했으나 대표 부재 /11월17일 연락했더니 됐다고 필요없다고하심","lat":36.354764,"lng":127.454162},{"id":"r071","row":72,"date":"2026-10-19","dateLabel":"10월 19일","time":"오후중","db":"경정","name":"우진케미텍","area":"대전대덕구","phone":"042-931-0095","address":"대전광역시 대덕구 신탄진로567번길 2","memo":"대표랑 통화, 마지막에 통보식으로 접수, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"거절","history":"다른곳에서 경정조회해봤다고하심 받을꺼없다고하심","lat":36.429932,"lng":127.421403},{"id":"r072","row":73,"date":"2026-10-19","dateLabel":"10월 19일","time":"오후중","db":"경정","name":"왕짬뽕순두부","area":"대전대덕구","phone":"0507-1406-5888","address":"대전 대덕구 비래서로 25 1층 왕짬뽕순두부","memo":"대표님 통화,/통보식전달/ 1년동안 4대보험 넣은 직원잇음, 가족아님/ 경정 / 간단접수","status":"거절","history":"기장에서 경정도한다고하심","lat":36.35482,"lng":127.44763},{"id":"r073","row":74,"date":"2026-10-20","dateLabel":"10월 20일","time":"오전중","db":"경정+특관자","name":"대광엔지니어링","area":"대전대덕구","phone":"042-628-4422","address":"대전광역시 대덕구 대전로1291번길 40","memo":"대표랑 통화, 마지막에 통보식으로 접수, 4대보험 가족도 있고 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"거절","history":"다른데서 조회해봤는데받을꺼없다고하심 가족근무자없음","lat":36.370451,"lng":127.419384},{"id":"r074","row":75,"date":"2026-10-20","dateLabel":"10월 20일","time":"오전중","db":"경정","name":"영상주방가구산업","area":"대전대덕구","phone":"042-624-6046","address":"대전광역시 대덕구 한남로138번길 58","memo":"대표랑 통화, 마지막에 통보식으로 접수, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"거절","history":"다른데서 확인해봤다고하심 보이스피싱인줄알았다심","lat":36.349814,"lng":127.412932},{"id":"r075","row":76,"date":"2026-10-20","dateLabel":"10월 20일","time":"오후중","db":"경정","name":"한가람","area":"대전대덕구","phone":"042-936-9324","address":"대전광역시 대덕구 신탄진로 555","memo":"대표랑 통화, 무난한 대화 흐름으로 마지막엔 통보식으로 접수, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"거절","history":"직원없고 이미조회해봤다고하심","lat":36.428717,"lng":127.420725},{"id":"r076","row":77,"date":"2026-10-21","dateLabel":"10월 21일","time":"오전중","db":"경정","name":"바로바로가스","area":"대전대덕구","phone":"042-633-8755","address":"대전광역시 대덕구 계족산로 136","memo":"대표랑 통화, 마지막에 통보식으로 접수, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"거절","history":"필요없다고하심","lat":36.365356,"lng":127.446879},{"id":"r077","row":78,"date":"2026-10-21","dateLabel":"10월 21일","time":"오전중","db":"경정","name":"하나축산","area":"대전대덕구","phone":"042-632-0977","address":"대전 대덕구 계족산로36번길 94","memo":"대표랑 통화, 무난하게 방문에 동의함, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"관리","history":"대표부재 오후에 재방문예정/22일 오후 부재/26일오후 예정","lat":36.362161,"lng":127.440412},{"id":"r078","row":79,"date":"2026-10-21","dateLabel":"10월 21일","time":"오후중","db":"경정","name":"지우엔지니어링","area":"대전서구","phone":"042-322-9119","address":"대전광역시 서구 신갈마로155번길 33 , 3층","memo":"여직원과 통화, 무난하게 방문에 동의함, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"거절","history":"경정하는곳이 있다고 필요없다고하심","lat":36.347339,"lng":127.36641},{"id":"r079","row":80,"date":"2026-10-21","dateLabel":"10월 21일","time":"오후중","db":"경정","name":"크로바정육점","area":"대전서구","phone":"042-483-0663","address":"대전광역시 서구 둔산로 155","memo":"대표랑 통화, 지원금 받을 생각 없다해서 대출 아니라하니까 일단 얘기는 들어봄, 마지막에 통보식으로 접수, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있었다고함/간단접수","status":"거절","history":"직원없음","lat":36.351491,"lng":127.394899},{"id":"r080","row":81,"date":"2026-10-21","dateLabel":"10월 21일","time":"오후중","db":"경정","name":"정림스토아만년점","area":"대전서구","phone":"0507-1353-0612","address":"대전 서구 만년로 45 상가동 지하1층","memo":"직원분 통화,/통보식전달함./ 1년동안 4대보험 넣은 직원잇음, 가족아님/ 경정 / 간단접수 / 24년도에 제가 다른곳에서 경정콜할때 경정금액 꽤 많이 나왓었는데 대표자 남편분의 반대로 계약성사 하지 못했습니다 . 그 이 후 다른곳과 계약되엇는지는 모르겠습니다.","status":"거절","history":"다른데서 조회해봤는데받을꺼없다고하심","lat":36.368583,"lng":127.378087},{"id":"r081","row":82,"date":"2026-10-22","dateLabel":"10월 22일","time":"오전중","db":"경정","name":"대전선경의료기상사","area":"대전서구","phone":"042-485-0623","address":"대전광역시 서구 한밭대로602번길 11","memo":"대표랑 통화, 처음에 지원금 필요없다는거 대출아니고 지원금이라하니 얘기들어봄,마지막에 통보식으로 접수, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"거절","history":"기장불만 조회는거부 10월26일 재연락예정/거절","lat":36.3573,"lng":127.365857},{"id":"r082","row":83,"date":"2026-10-22","dateLabel":"10월 22일","time":"오전중","db":"경정","name":"가야축산","area":"대전서구","phone":"042-537-4545","address":"대전광역시 서구 도화공원길 16","memo":"대표랑 통화, 어디서 전화한거냐 등 살짝 미심쩍어함, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"계약완료","history":"계약완료","lat":36.316194,"lng":127.381544},{"id":"r083","row":84,"date":"2026-10-22","dateLabel":"10월 22일","time":"오전중","db":"경정","name":"손수베이커리","area":"대전서구","phone":"0507-1330-5696","address":"대전 서구 관저동로 42 손수 베이커리","memo":"직원분 통화,/통보식전달함./ 1년동안 4대보험 넣은 직원잇음, 가족아님/ 경정 / 간단접수","status":"거절","history":"대표부재 26일 오전10시 방문하기로함/필요없다고하심","lat":36.297099,"lng":127.343932},{"id":"r084","row":85,"date":"2026-10-22","dateLabel":"10월 22일","time":"오후중","db":"경정","name":"달인축산 2호점","area":"대전서구","phone":"042-524-3600","address":"대전광역시 서구 도마4길 16","memo":"여직원과 통화, 사장한테 22일 방문한다는거 전달한다고함, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"거절","history":"직원없음 필요없다고하심","lat":36.315402,"lng":127.380471},{"id":"r085","row":86,"date":"2026-10-22","dateLabel":"10월 22일","time":"오후중","db":"경정","name":"항아리반찬","area":"대전서구","phone":"0507-1376-6504","address":"대전 서구 가장로 94","memo":"대표님 통화,/무난히 오라하심./ 1년동안 4대보험 넣은 직원잇음, 가족아님/ 경정 / 간단접수","status":"관리","history":"목요일 정기휴무일 다른날다시방문예정/","lat":36.334566,"lng":127.384313},{"id":"r086","row":87,"date":"2026-10-22","dateLabel":"10월 22일","time":"오후 4:00","db":"특관자경정","name":"지에스25대전도마초점","area":"대전서구","phone":"042-533-3121","address":"대전 서구 도마로7번길 26","memo":"대표님 통화,/무난히오라함./ 아들4대보험넣으셧다함/ 특관자경정/ 간단접수","status":"조회완료거절","history":"한도없음","lat":36.323658,"lng":127.371178},{"id":"r087","row":88,"date":"2026-10-23","dateLabel":"10월 23일","time":"오전중","db":"경정","name":"빽다방대전정부청사점","area":"대전서구","phone":"042-331-9795","address":"대전 서구 둔산중로134번길 29 청사프라자 1층 106호","memo":"직원분 통화,/무난히오라함./ 1년동안 4대보험 넣은 직원잇음, 가족아님/ 경정 / 간단접수","status":"거절","history":"알아서한다고하심","lat":36.359015,"lng":127.388715},{"id":"r088","row":89,"date":"2026-10-23","dateLabel":"10월 23일","time":"오전중","db":"경정","name":"선화수산물유통","area":"대전서구","phone":"042-257-9838","address":"대전 서구 동서대로 1140-1","memo":"대표랑 통화, 무난하게 방문에 동의함, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"거절","history":"기장에서 경정도한다고하심","lat":36.327362,"lng":127.386917},{"id":"r089","row":90,"date":"2026-10-23","dateLabel":"10월 23일","time":"오전중","db":"경정","name":"은비유통","area":"대전서구","phone":"042-486-0614","address":"대전 서구 도솔로483번길 88","memo":"대표랑 통화, 무난하게 방문에 동의함, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있었다고함/간단접수","status":"계약완료","history":"계약완료","lat":36.345117,"lng":127.400169},{"id":"r090","row":91,"date":"2026-10-23","dateLabel":"10월 23일","time":"오후중","db":"경정","name":"수라면옥","area":"대전서구","phone":"042-484-1332","address":"대전 서구 대덕대로 398 제이원빌딩 B1 수라면옥","memo":"대표님 통화,/무난히오라함./ 1년동안 4대보험 넣은 직원잇음, 가족아님/ 경정 / 간단접수","status":"거절","history":"경정확인해봤다고하심 가족근로자도없음","lat":36.368416,"lng":127.380006},{"id":"r091","row":92,"date":"2026-10-26","dateLabel":"10월 26일","time":"오전중","db":"경정","name":"도레미아구찜","area":"대전유성구","phone":"042-825-8828","address":"대전 유성구 문화원로14번길 36 1층 도레미아구찜","memo":"대표님 통화,/마지막에 통보식전달/ 1년동안 4대보험 넣은 직원잇음, 가족아님/ 경정","status":"거절","history":"금일휴무일 27일 재방문예정/27일 대표부재/ 11월17일 필요없다고하심","lat":36.359831,"lng":127.337992},{"id":"r092","row":93,"date":"2026-10-26","dateLabel":"10월 26일","time":"오전중","db":"경정","name":"스노우코스티","area":"대전유성구","phone":"070-7722-3474","address":"대전 유성구 학하동로 57-11 1층 스노우코스티","memo":"대표랑 통화, 무난한 대화흐름 이어짐, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"거절","history":"필요없다고하심","lat":36.338216,"lng":127.310727},{"id":"r093","row":94,"date":"2026-10-26","dateLabel":"10월 26일","time":"오후중","db":"경정","name":"피제리아육일사","area":"대전유성구","phone":"0507-1498-7575","address":"대전 유성구 수통골로 47-12 형과아우 2층","memo":"직원분 통화,/마지막에 통보식전달/ 1년동안 4대보험 넣은 직원잇음, 가족아님/ 경정","status":"거절","history":"필요없다고하심","lat":36.346086,"lng":127.289289},{"id":"r094","row":95,"date":"2026-10-27","dateLabel":"10월27일","time":"오전중","db":"경정","name":"실로아음악무용학원","area":"대전유성구","phone":"0507-1356-7783","address":"대전 유성구 전민로38번길 55 5층","memo":"대표님 통화,/무난히오라하심/ 가족아닌 남 4대보험 넣으심/ 갑자기 통화중에 4대보험 이 60만원 올랏다면서 그거 왜그러냐고 물으심 ./간단 경정.","status":"계약완료","history":"계약완료","lat":36.399244,"lng":127.400697},{"id":"r095","row":96,"date":"2026-10-27","dateLabel":"10월27일","time":"오전중","db":"경정","name":"슈어데이터랩","area":"대전유성구","phone":"042-867-7600","address":"대전 유성구 엑스포로446번길 38 401호","memo":"여직원과 통화, 마지막에 통보식으로 접수,남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"거절","history":"관리하는곳이 있다고 거절하심","lat":36.395826,"lng":127.407219},{"id":"r096","row":97,"date":"2026-10-27","dateLabel":"10월27일","time":"오후중","db":"경정","name":"이마트24R대전송강한솔점","area":"대전유성구","phone":"042-933-5797","address":"대전 유성구 송강로 15 상가","memo":"직원분 통화,/무난히오라하심/ 1년동안 4대보험 넣은 직원잇음, 가족아님/ 경정","status":"관리","history":"대표부재 저녁9시쯤오신다고하심 연락처남겨놓고옴","lat":36.431895,"lng":127.385355},{"id":"r097","row":98,"date":"2026-10-27","dateLabel":"10월27일","time":"오후중","db":"경정","name":"아루다","area":"대전유성구","phone":"042-936-3770","address":"대전광역시 유성구 테크노4로 17 A-109호 A-307호 D-303호(A동 109호로 방문요청)","memo":"여직원과 통화, 무난하게 방문에 동의함, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함,A동 109호로 방문하면 된다고함/간단접수","status":"거절","history":"담당자분부재인관계로 연락처 전달해서 전화준다고하심/담당자 연락와서 필요없다고하심","lat":36.43241,"lng":127.394988},{"id":"r098","row":99,"date":"2026-10-27","dateLabel":"10월27일","time":"오후중","db":"경정","name":"엠에스엘","area":"대전유성구","phone":"042-936-2017","address":"대전광역시 유성구 테크노1로 75 508호","memo":"대표랑 통화, 무난한 대화흐름 이어짐, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"거절","history":"필요없다고하심 직원중가족도없음","lat":36.428349,"lng":127.395789},{"id":"r099","row":100,"date":"2026-10-28","dateLabel":"10월28일","time":"오전중","db":"경정+특관자","name":"신동광택","area":"대전유성구","phone":"010-8344-4989","address":"대전 유성구 복용동로 35 지하층 B146, B147호","memo":"대표님 통화,/무난히오라하심/ 가족도 있고 남인 4대보험 직원 잇다하심. ./간단접수","status":"계약완료","history":"계약완료","lat":36.338398,"lng":127.320332},{"id":"r100","row":101,"date":"2026-10-28","dateLabel":"10월28일","time":"오전중","db":"경정","name":"앵스트롬스","area":"대전유성구","phone":"042-933-8331","address":"대전광역시 유성구 테크노4로 17 대덕비즈센터 C동 715호","memo":"대표랑 통화, 무난한 대화흐름 이어짐, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있었다고함/간단접수","status":"거절","history":"오라고한적도없고 성질내심","lat":36.43241,"lng":127.394988},{"id":"r101","row":102,"date":"2026-10-28","dateLabel":"10월28일","time":"오후 3:00","db":"특관자경정","name":"씨유유성봉명스타점","area":"대전유성구","phone":"010-2778-2232","address":"대전 유성구 계룡로87번길 61 (봉명동)","memo":"대표님 통화,/무난히오라하심/ 배우자 19년부터 4대보험 고용,산재 넣으셨다함 ./특관자 경정","status":"계약완료","history":"특관자없음 경정 계약완료","lat":36.35689,"lng":127.341503},{"id":"r102","row":103,"date":"2026-10-28","dateLabel":"10월28일","time":"오후중","db":"경정","name":"에스지에너지","area":"대전유성구","phone":"042-384-0055","address":"대전광역시 유성구 국제과학9로 55 주에스지에너지","memo":"여직원과 통화, 어떤 지원금 명목으로 받는거냐 등 물어봄, 마지막엔 통보식 접수, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"거절","history":"알아서 잘한다고 필요없다고하심","lat":36.462865,"lng":127.365923},{"id":"r103","row":111,"date":"2026-11-02","dateLabel":"11월2일","time":"오전중","db":"경정","name":"건진건설","area":"대전유성구","phone":"042-826-9535","address":"대전광역시 유성구 노은동로75번길 74","memo":"남직원과 통화, 무난한 대화흐름 이어짐, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"거절","history":"다른데서 확인해봤다고 필요없다고하심","lat":36.367428,"lng":127.319413},{"id":"r104","row":112,"date":"2026-11-02","dateLabel":"11월2일","time":"오전중","db":"경정","name":"명성앙카석재","area":"대전유성구","phone":"042-822-2689","address":"대전광역시 유성구 유성대로821번길 15 102호","memo":"대표랑 통화, 무난하게 방문에 동의함, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"거절","history":"기장에서 처리했다고하심","lat":36.365333,"lng":127.337381},{"id":"r105","row":113,"date":"2026-11-02","dateLabel":"11월2일","time":"오후중","db":"경정","name":"마루이엔지","area":"대전유성구","phone":"042-471-8782","address":"대전광역시 유성구 복용동로 43 에프340호","memo":"여직원과 통화, 마지막에 통보식으로 접수/남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"거절","history":"필요없다고하심","lat":36.337964,"lng":127.321694},{"id":"r106","row":114,"date":"2026-11-02","dateLabel":"11월2일","time":"오후중","db":"특관자경정","name":"착한정육점 대전유성점","area":"대전유성구","phone":"042-822-8466","address":"대전광역시 유성구 은구비남로33번길 5 , 110호","memo":"대표랑 통화, 지원금 내용에 크게 관심은 없어보이나 물음에는 대답함,마지막에 통보식으로 접수, 대표의 배우자가 고용산재 보험 가입했고 최근 3년동안 고용산재 보험료 납부했다고함/특관자경정 접수","status":"관리","history":"대표부재 3일 재방문예정/ 법인이라 저녁에 퇴근해서 조회해보신다고하심","lat":36.372533,"lng":127.318987},{"id":"r107","row":115,"date":"2026-11-03","dateLabel":"11월3일","time":"오전중","db":"경정","name":"해림스틸하우스","area":"대전유성구","phone":"042-671-9990","address":"대전광역시 유성구 테크노3로 65","memo":"여직원과 통화, 무난한 대화흐름 이어짐, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"관리","history":"직원통화 주소지 공주에 있다고 하심 대표가 다시 전화주기로함","lat":36.429324,"lng":127.390779},{"id":"r108","row":116,"date":"2026-11-03","dateLabel":"11월3일","time":"오전중","db":"경정","name":"경동공구건재페인트","area":"대전유성구","phone":"042-935-6844","address":"대전광역시 유성구 구즉로 97","memo":"대표랑 통화, 무난한 대화흐름 이어짐, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"거절","history":"5년이상 직원둔적없음","lat":36.436928,"lng":127.388113},{"id":"r109","row":117,"date":"2026-11-03","dateLabel":"11월3일","time":"오후중","db":"경정","name":"이미지미술학원","area":"대전유성구","phone":"0507-1407-7998","address":"대전 유성구 엑스포로 461-1 3층","memo":"대표님통화,/무난히 오라함. / 1년동안 4대보험 넣은 직원잇음, /가족아님/ 경정","status":"조회완료거절","history":"한도없음","lat":36.397627,"lng":127.404582},{"id":"r110","row":118,"date":"2026-11-04","dateLabel":"11월4일","time":"오후중","db":"경정","name":"신머이쌀국수노은역점","area":"대전유성구","phone":"042-826-4569","address":"대전 유성구 은구비남로33번길 13-8","memo":"대표님통화,/마지막에 통보식으로 전달함 / 1년동안 4대보험 넣은 직원잇음, /가족아님/지금은 직원없다하심/ 경정","status":"거절","history":"직원이 한번도 없었다고함 알바로만고용중","lat":36.373028,"lng":127.31888},{"id":"r111","row":119,"date":"2026-11-04","dateLabel":"11월4일","time":"오전중","db":"경정","name":"블루텍","area":"대전유성구","phone":"042-385-1700","address":"대전광역시 유성구 계룡로 114 , 12층 1203호","memo":"여직원과 통화, 무난한 대화흐름 이어짐, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"거절","history":"방산기업이라 외부인 출입불가라고함","lat":36.352665,"lng":127.342974},{"id":"r112","row":120,"date":"2026-11-04","dateLabel":"11월4일","time":"오후중","db":"경정","name":"리베스트","area":"대전유성구","phone":"042-867-0119","address":"대전광역시 유성구 국제과학21로 34","memo":"남직원과 통화, 마지막에 통보식으로 접수, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"거절","history":"담당자부재로 연락처남겨놓고옴 5일 재연락예정/담당자 전화와서 자문회계사 세무사있어서 불필요하다고함","lat":36.445532,"lng":127.351538},{"id":"r113","row":121,"date":"2026-11-04","dateLabel":"11월4일","time":"오후중","db":"경정","name":"오토오아시스 롯데마트 대덕점","area":"대전유성구","phone":"042-935-4026","address":"대전광역시 유성구 테크노중앙로 14","memo":"대표랑 통화, 마지막에 통보식으로 접수, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"거절","history":"직원없는1인기업이라고하심","lat":36.426927,"lng":127.386979},{"id":"r114","row":122,"date":"2026-11-05","dateLabel":"11월5일","time":"오전중","db":"경정","name":"블루핸즈 탑립점","area":"대전유성구","phone":"042-626-9974","address":"대전광역시 유성구 테크노10로 53","memo":"남직원과 통화, 무난한 대화흐름 이어짐, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"관리","history":"대표부재 01054220450연락후재방문예정3시반이후","lat":36.416516,"lng":127.408243},{"id":"r115","row":123,"date":"2026-11-05","dateLabel":"11월5일","time":"오전중","db":"경정","name":"국제오토서비스","area":"대전유성구","phone":"042-862-3956","address":"대전광역시 유성구 엑스포로 455","memo":"남직원과 통화, 무난한 대화흐름 이어짐, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"거절","history":"필요없다고하심","lat":36.396979,"lng":127.404593},{"id":"r116","row":124,"date":"2026-11-05","dateLabel":"11월5일","time":"오전중","db":"경정","name":"기아오토큐 구암점","area":"대전유성구","phone":"042-825-8585","address":"대전광역시 유성구 유성대로 640","memo":"대표랑 통화, 무난한 대화흐름 이어짐, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"거절","history":"여러명다녀가심 안나온다고하심","lat":36.351111,"lng":127.32856},{"id":"r117","row":125,"date":"2026-11-05","dateLabel":"11월5일","time":"오후중","db":"경정","name":"블루핸즈 유성현대서비스","area":"대전유성구","phone":"042-824-4972","address":"대전광역시 유성구 한밭대로 398","memo":"남직원과 통화, 무난한 대화흐름 이어짐, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"관리","history":"대표부재 6일 재연락예정","lat":36.362008,"lng":127.343428},{"id":"r118","row":126,"date":"2026-11-05","dateLabel":"11월5일","time":"오후중","db":"경정","name":"모던조명","area":"대전유성구","phone":"042-545-8805","address":"대전광역시 유성구 계백로 949","memo":"대표랑 통화, 마지막에 통보식으로 접수, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"조회완료거절","history":"한도없음","lat":36.30162,"lng":127.329255},{"id":"r119","row":127,"date":"2026-11-06","dateLabel":"11월6일","time":"오전중","db":"경정","name":"해나루한돈","area":"충청남도당진시","phone":"041-354-3988","address":"충남 당진시 무수동로 83","memo":"대표님통화,/무난히오라고하심/ 1년동안 4대보험 넣은 직원잇음, /가족아님 /간단경정","status":"승인/관리","history":"특관자있음, 의심이 심해서 9일에 다시 만나기로함/9일방문 기장에서 경정도 진행한다고해서 거절 특관인만 진행권유 10일 재 방문예정","lat":36.889147,"lng":126.636899},{"id":"r120","row":128,"date":"2026-11-06","dateLabel":"11월6일","time":"오전중","db":"경정","name":"씨유당진채운탑동점","area":"충청남도당진시","phone":"041-352-3750","address":"충남 당진시 대호만로 30-40 (채운동)","memo":"대표님통화,/무난히오라고하심,의심좀잇으시네요/ 1년동안 4대보험 넣은 직원잇음, /가족아님 /간단경정","status":"거절","history":"직원없다고 하심","lat":36.898864,"lng":126.623346},{"id":"r121","row":129,"date":"2026-11-06","dateLabel":"11월6일","time":"오후중","db":"경정","name":"뚝방촌","area":"충청남도당진시","phone":"041-354-9959","address":"충남 당진시 송산면 송산로 1105-16","memo":"대표님배우자분통화,/무난히오라하심 ,전달해놓겟다하심 / 1년동안 4대보험 넣은 직원잇음, /가족아님/ 경정","status":"거절","history":"필요없다고하심","lat":36.977897,"lng":126.683087},{"id":"r122","row":130,"date":"2026-11-06","dateLabel":"11월6일","time":"오후중","db":"경정","name":"중식당진진","area":"충청남도당진시","phone":"0504-0544-5653","address":"충남 당진시 무수동5길 15-5","memo":"대표님배우자분통화,/무난히오라하심 ,전달해놓겟다하심 / 1년동안 4대보험 넣은 직원잇음, /가족아님/ 경정","status":"거절","history":"기장에서 알아서한다고하심","lat":36.894052,"lng":126.637793},{"id":"r123","row":131,"date":"2026-11-06","dateLabel":"11월6일","time":"오후중","db":"경정","name":"다원마트정육","area":"충청남도당진시","phone":"010-6679-4289","address":"충청남도 당진시 서해로 6283","memo":"직원분통화,/무난히오라하심 ,전달해놓겟다하심 / 1년동안 4대보험 넣은 직원잇음, /가족아님/ 경정","status":"거절","history":"필요없다고하심","lat":36.902827,"lng":126.684055},{"id":"r124","row":132,"date":"2026-11-09","dateLabel":"11월9일","time":"오전중","db":"경정","name":"디오스켐","area":"충청남도당진시","phone":"041-358-2011","address":"충청남도 당진시 석문면 산단2로 95","memo":"여직원과 통화, 무난한 대화흐름 이어짐, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"거절","history":"법인세납부를 안한다고하심 직원중 가족없음","lat":36.997289,"lng":126.601014},{"id":"r125","row":133,"date":"2026-11-09","dateLabel":"11월9일","time":"오전중","db":"특관자경정","name":"우리가스","area":"충청남도당진시","phone":"041-357-3050","address":"충청남도 당진시 송산면 당산1로 476","memo":"대표랑 통화, 무난한 대화흐름 이어짐, 대표의 조카가 고용산재 보험 가입했고 최근 3년동안 고용산재 보험료 납부했다고함/특관자경정 접수","status":"관리","history":"대표부재 조카랑 통화 10일 오후 다시 연락하고오라고하심","lat":36.933789,"lng":126.66177},{"id":"r126","row":134,"date":"2026-11-09","dateLabel":"11월9일","time":"오후중","db":"경정","name":"글로벌신우","area":"충청남도당진시","phone":"041-355-1016","address":"충청남도 당진시 면천면 산업단지길 17-65","memo":"여직원과 통화, 마지막에 통보식으로 접수, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"거절","history":"기장에서 확인한다고하심","lat":36.803523,"lng":126.705285},{"id":"r127","row":135,"date":"2026-11-09","dateLabel":"11월9일","time":"오후중","db":"경정","name":"유안이엔지","area":"충청남도당진시","phone":"041-430-8115","address":"충청남도 당진시 순성면 순성로 731-23","memo":"남직원과 통화, 무난한 대화흐름 이어짐, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"관리","history":"대표랑 상의해서 연락준다고하심/11일 담당자 통화완료 대표한테 확인은 못했지만 조회먼저해보기로함","lat":36.859677,"lng":126.725258},{"id":"r128","row":136,"date":"2026-11-10","dateLabel":"11월10일","time":"오전중","db":"경정","name":"케이에이지","area":"충청남도당진시","phone":"041-355-6891","address":"충청남도 당진시 고대면 해창길 114-1","memo":"대표랑 통화, 무난한 대화흐름 이어짐, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"거절","history":"직원없음 필요없다고하심","lat":36.97529,"lng":126.521949},{"id":"r129","row":137,"date":"2026-11-10","dateLabel":"11월10일","time":"오전중","db":"경정","name":"라코스테 당진점","area":"충청남도당진시","phone":"041-358-7778","address":"충청남도 당진시 당진중앙2로 124","memo":"대표랑 통화, 무난하게 방문에 동의함, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"계약완료","history":"특관인 있음 고민해보고 진행예정","lat":36.894436,"lng":126.63157},{"id":"r130","row":138,"date":"2026-11-10","dateLabel":"11월10일","time":"오후중","db":"경정","name":"마켓21","area":"충청남도당진시","phone":"041-357-5737","address":"충청남도 당진시 당진중앙2로 134 , 1층","memo":"대표랑 통화, 무난하게 방문에 동의함, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있었다고함/간단접수","status":"거절","history":"대표부재 11일 재연락예정/12일 연락했는데 필요없다고하심","lat":36.89474,"lng":126.632007},{"id":"r131","row":139,"date":"2026-11-10","dateLabel":"11월10일","time":"오후중","db":"경정","name":"족발꾼당진읍내점","area":"충청남도당진시","phone":"0507-1398-2024","address":"충남 당진시 북문로1길 35-6 1층","memo":"대표님통화,/무난히오라고하심/ 1년동안 4대보험 넣은 직원잇음, /가족아님 /간단경정","status":"조회완료거절","history":"한도없음","lat":36.900987,"lng":126.630883},{"id":"r132","row":140,"date":"2026-11-11","dateLabel":"11월 11일","time":"오전중","db":"경정","name":"하나이엔지","area":"충청남도당진시","phone":"041-352-4539","address":"충청남도 당진시 송악읍 순성로 822-59","memo":"남직원과 통화, 마지막에 통보식으로 접수, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"거절","history":"기장에서 알아서 다 해주고있다고하심","lat":36.860085,"lng":126.737568},{"id":"r133","row":141,"date":"2026-11-11","dateLabel":"11월 11일","time":"오전중","db":"경정","name":"휘슬테크","area":"충청남도당진시","phone":"041-363-4616","address":"충청남도 당진시 신평면 원머리로 166-28","memo":"대표랑 통화, 무난하게 방문에 동의함, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"관리","history":"인천이본사이고 본사에서 다관리한다고하심 박미정과장담당 전화했으나 무응답 익일 재연락예정","lat":36.892383,"lng":126.789202},{"id":"r134","row":142,"date":"2026-11-11","dateLabel":"11월 11일","time":"오후중","db":"경정","name":"성원목재","area":"충청남도당진시","phone":"041-363-2030","address":"충청남도 당진시 신평면 서해로 7489-66","memo":"대표랑 통화, 무난한 대화흐름 이어짐, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"거절","history":"필요없다고하심","lat":36.883901,"lng":126.81141},{"id":"r135","row":143,"date":"2026-11-12","dateLabel":"11월 12일","time":"오전중","db":"특관자경정","name":"KCC페인트 미공사","area":"충청남도당진시","phone":"041-362-3901","address":"충청남도 당진시 합덕읍 중동길 45-2","memo":"대표랑 통화, 무난한 대화흐름 이어짐, 대표의 아들이 고용산재 보험 가입했고 최근 3년동안 고용산재 보험료 납부했다고함/특관자경정 접수","status":"거절","history":"여행가서 주말에온다고하심 / 16일에 재방문예정/17일 필요없다고 거절하심","lat":36.808608,"lng":126.772694},{"id":"r136","row":144,"date":"2026-11-12","dateLabel":"11월 12일","time":"오전중","db":"경정","name":"현대자동차블루핸즈 동양모터스","area":"충청남도당진시","phone":"041-357-6811","address":"충청남도 당진시 송악읍 대섬길 228","memo":"여직원과 통화, 마지막에 통보식으로 접수, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"거절","history":"다른데서 경정한다고하심","lat":36.975734,"lng":126.74737},{"id":"r137","row":145,"date":"2026-11-12","dateLabel":"2026. 11. 12","time":"오후중","db":"경정+특관자","name":"점보카써비스","area":"충청남도당진시","phone":"041-353-4133","address":"충청남도 당진시 송악읍 고잔로 124","memo":"대표의 가족과 통화, 무난한 대화흐름 이어짐, 4대보험 가족도 있고 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"거절","history":"다른곳에서 이미 경정접수했다고하심 고용산재가족은 가입안했다고하심","lat":36.959758,"lng":126.750388},{"id":"r138","row":146,"date":"2026-11-13","dateLabel":"11월 13일","time":"오전중","db":"경정","name":"르노코리아자동차지정정비센터 당진정비","area":"충청남도당진시","phone":"041-357-3532","address":"충청남도 당진시 아미로 808","memo":"여직원과 통화, 무난한 대화흐름 이어짐, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있었다고함/간단접수","status":"계약완료","history":"대표부재 직원만있음 17일 재방문예정/특관인경정","lat":36.880469,"lng":126.632879},{"id":"r139","row":147,"date":"2026-11-13","dateLabel":"11월 13일","time":"오전중","db":"특관자경정","name":"신광합판목재 영림몰딩도어","area":"충청남도당진시","phone":"041-355-7489","address":"충청남도 당진시 송악읍 흥척동길 3","memo":"대표랑 통화, 마지막에 통보식으로 접수, 대표의 아들이 고용산재 보험 가입했고 최근 3년동안 고용산재 보험료 납부했다고함/특관자경정 접수","status":"거절","history":"직원 아들밖에 없음 아들은 고용산재 제외했다고하심","lat":36.906455,"lng":126.690205},{"id":"r140","row":148,"date":"2026-11-13","dateLabel":"11월 13일","time":"오전중","db":"경정","name":"라테라스 짐","area":"충청남도당진시","phone":"070-4288-7818","address":"충남 당진시 시청2로 49-25 로고스타워 10층","memo":"대표님통화,/무난히오라고하심,3시까지만 계시다하심/ 1년동안 4대보험 넣은 직원잇음, /가족아님 /간단경정","status":"조회완료거절","history":"대표부재 연락처남겨놓고옴 16일 재연락예정/기경정있음 한도없음","lat":36.887668,"lng":126.646682},{"id":"r141","row":149,"date":"2026-11-16","dateLabel":"11월 16일","time":"오전중","db":"경정","name":"오성티엠알","area":"충청남도당진시","phone":"041-352-2722","address":"충청남도 당진시 순성면 순성로 587-307","memo":"대표랑 통화, 재콜로 접수, 무난한 대화흐름 이어짐, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"거절","history":"세무조사중이라 조회거절","lat":36.853864,"lng":126.714714},{"id":"r142","row":150,"date":"2026-11-16","dateLabel":"11월 16일","time":"오전중","db":"경정","name":"한성산업","area":"충청남도당진시","phone":"041-354-7705","address":"충청남도 당진시 송악읍 송악로 625","memo":"여직원과 통화, 마지막에 통보식으로 접수, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"거절","history":"사업장1년미만 기장에다확인한다고하심","lat":36.937269,"lng":126.73994},{"id":"r143","row":151,"date":"2026-11-16","dateLabel":"11월 16일","time":"오후중","db":"경정","name":"세현중공업","area":"충청남도당진시","phone":"041-363-3284","address":"충청남도 당진시 신평면 북부산업로 94","memo":"여직원과 통화, 마지막에 통보식으로 접수, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"관리","history":"담당자 목요일에출근한다고하심19일 재연락예정","lat":36.889251,"lng":126.811139},{"id":"r144","row":152,"date":"2026-11-16","dateLabel":"11월 16일","time":"오후중","db":"특관자경정","name":"주하오토","area":"충청남도당진시","phone":"041-350-7898","address":"충청남도 당진시 송악읍 북부산업로 1044 상가B동 34호 1층 주하오토","memo":"대표랑 통화, 무난한 대화흐름 이어짐, 대표의 동생이 고용산재 보험 가입했고 최근 3년동안 고용산재 보험료 납부했다고함/특관자경정 접수","status":"승인/관리","history":"남동생 특관자있음 서류 읽어보고 사인해서 보내주신다고하심 여동생은 출산휴가 육아휴직예정이라 진행안한다고하심","lat":36.964855,"lng":126.766469},{"id":"r145","row":153,"date":"2026-11-17","dateLabel":"11월 17일","time":"오전중","db":"경정","name":"한솥도시락 당진터미널점","area":"충청남도당진시","phone":"0507-1335-2042","address":"충남 당진시 밤절로 152","memo":"직원분통화,/전달하겟다하심/ 1년동안 4대보험 넣은 직원잇음, /가족아님 /간단경정","status":"관리","history":"다른지점가셔서 18일 재방문예정","lat":36.901512,"lng":126.646101},{"id":"r146","row":154,"date":"2026-11-17","dateLabel":"11월 17일","time":"오후중","db":"경정","name":"세븐일레븐 당진신평중앙점","area":"충청남도당진시","phone":"010-9638-0482","address":"충남 당진시 신평면 거산3거리길 74-45","memo":"대표님배우자분통화,/무난히오라고하심,전달하겟다하심/ 1년동안 4대보험 넣은 직원잇음, /가족아님 /간단경정","status":"조회완료거절","history":"한도없음","lat":36.882712,"lng":126.759181},{"id":"r147","row":155,"date":"2026-11-17","dateLabel":"11월 17일","time":"오후 2:00","db":"경정","name":"더나은미래학원","area":"충청남도당진시","phone":"041-354-0015","address":"충남 당진시 당진중앙1로 272-18","memo":"대표님통화,/무난히오라고하심,광고성이냐의심이많으심/ 1년이상 4대보험 직원잇다하심/ 가족아님 /간단경정 /2시이후문여신다하심","status":"계약완료","history":"특관인경정","lat":36.897949,"lng":126.637429},{"id":"r148","row":156,"date":"2026-11-17","dateLabel":"11월 17일","time":"오후중","db":"경정","name":"명동광고사","area":"충청남도당진시","phone":"010-5432-3830","address":"충남 당진시 당진중앙2로 42-7","memo":"대표님배우자분통화,/무난히오라고하심,전달하겟다하심/ 배우자분이 고용산재 넣고 계시다하심 /특관자경정","status":"거절","history":"다른데서조회해봤다고하심 가족은 고용산재 안들어가고있다고하심","lat":36.891988,"lng":126.628231},{"id":"r149","row":157,"date":"2026-11-17","dateLabel":"11월 17일","time":"오후중","db":"경정","name":"탑동태권도","area":"충청남도당진시","phone":"0507-1372-8806","address":"충남 당진시 대호만로 30-40 4층","memo":"대표님통화,/무난히오라고하심/ 1년이상 4대보험 직원잇다하심/ 가족아님 /간단접수","status":"조회완료거절","history":"한도없음","lat":36.898864,"lng":126.623346},{"id":"r150","row":158,"date":"2026-11-19","dateLabel":"11월 19일","time":"오전중","db":"경정","name":"수빵소당진점","area":"충청남도당진시","phone":"041-355-0453","address":"충남 당진시 당진중앙1로 243-6 1, 2층","memo":"직원분통화,/전달하겟다하심. / 1년이상 4대보험 직원잇다하심/ 가족아님 /간단경정","status":"관리","history":"대표부재 20일 재연락예정","lat":36.898699,"lng":126.636225},{"id":"r151","row":159,"date":"2026-11-19","dateLabel":"11월 19일","time":"오후중","db":"경정","name":"할리스커피당진시청점","area":"충청남도당진시","phone":"070-8808-1040","address":"충남 당진시 시청2로 49-25 로고스타워","memo":"직원분통화,/무난히 오라고 하심/ 1년이상 4대보험 직원잇다하심/ 가족아님 /간단경정","status":"거절","history":"직원없음 가족없음","lat":36.887668,"lng":126.646682},{"id":"r152","row":160,"date":"2026-11-19","dateLabel":"11월 19일","time":"오후중","db":"경정","name":"메가엠지씨커피당진기지시점","area":"충청남도당진시","phone":"041-355-1110","address":"충남 당진시 송악읍 반촌로 70-16","memo":"직원분통화,/무난히 오라고 하심/ 1년이상 4대보험 직원잇다하심/ 가족아님 /간단경정","status":"관리","history":"대표부재20일 재연락예정","lat":36.90213,"lng":126.692465},{"id":"r153","row":161,"date":"2026-11-19","dateLabel":"11월 19일","time":"오후중","db":"경정","name":"펫마트당진점","area":"충청남도당진시","phone":"041-355-1550","address":"충남 당진시 계성3길 38 펫마트 당진점","memo":"직원분통화,/전달하겟다하심. / 1년이상 4대보험 직원잇다하심/ 가족아님 /간단경정","status":"관리","history":"대표부재 20일 재연락예정","lat":36.899219,"lng":126.633776},{"id":"r154","row":162,"date":"2026-11-19","dateLabel":"11월 19일","time":"오후중","db":"경정","name":"촌가네흑염소전문점","area":"충청남도당진시","phone":"041-352-8266","address":"충남 당진시 먹거리길 86-5 흑염소 전문점 , 촌가네","memo":"직원분통화,/전달하겟다하심. / 1년이상 4대보험 직원잇다하심/ 가족아님 /간단경정","status":"관리","history":"오전에 계심20일 오전 재방문예정","lat":36.886349,"lng":126.635149},{"id":"r155","row":163,"date":"2026-11-20","dateLabel":"11월 20일","time":"오후중","db":"경정","name":"썬쥬얼리","area":"충청남도당진시","phone":"0507-1406-3063","address":"충남 당진시 당진중앙2로 122","memo":"직원분통화,/전달하겟다하심. / 1년이상 4대보험 직원잇다하심/ 가족아님 /간단경정","status":"대기","history":"","lat":36.894352,"lng":126.631454},{"id":"r156","row":164,"date":"2026-11-20","dateLabel":"11월 20일","time":"오후중","db":"경정","name":"들마루","area":"충청남도당진시","phone":"041-358-5292","address":"충남 당진시 고대면 보덕포로 75","memo":"대표님통화,/무난히오라하심 / 1년이상 4대보험 직원잇다하심/ 가족아님 /간단경정","status":"대기","history":"","lat":36.917941,"lng":126.606323},{"id":"r157","row":165,"date":"2026-11-20","dateLabel":"11월 20일","time":"오후중","db":"경정","name":"두거리우신탕(당진점)","area":"충청남도당진시","phone":"041-352-2744","address":"충남 당진시 정안로 16","memo":"직원분통화,/전달하겟다하심. / 1년이상 4대보험 직원잇다하심/ 가족아님 /간단경정","status":"대기","history":"","lat":36.90715,"lng":126.645972},{"id":"r158","row":166,"date":"2026-11-20","dateLabel":"11월 20일","time":"오후중","db":"경정","name":"롤링파스타 충남당진점","area":"충청남도당진시","phone":"0507-1358-7573","address":"충남 당진시 계성3길 6 2층","memo":"직원분통화,/전달하겟다하심. / 1년이상 4대보험 직원잇다하심/ 가족아님 /간단경정","status":"대기","history":"","lat":36.898427,"lng":126.634841},{"id":"r159","row":167,"date":"2026-11-23","dateLabel":"11월 23일","time":"오전중","db":"경정","name":"삼양건재","area":"충청남도서산시","phone":"041-688-3156","address":"충청남도 서산시 해미면 양능로 5","memo":"대표랑 통화, 무난한 대화흐름 이어짐, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있었다고함/간단접수","status":"대기","history":"","lat":36.713215,"lng":126.534393},{"id":"r160","row":168,"date":"2026-11-23","dateLabel":"11월 23일","time":"오전중","db":"경정","name":"정연테크","area":"충청남도서산시","phone":"041-681-9885","address":"충청남도 서산시 대산읍 충의로 2493-6","memo":"여직원과 통화, 무난한 대화흐름 이어짐, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"대기","history":"","lat":36.98238,"lng":126.415584},{"id":"r161","row":169,"date":"2026-11-23","dateLabel":"11월 23일","time":"오후중","db":"경정","name":"대진테크","area":"충청남도서산시","phone":"041-663-8133","address":"충청남도 서산시 대산읍 명지2로 157-2","memo":"대표랑 통화, 무난한 대화흐름 이어짐, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"대기","history":"","lat":36.963331,"lng":126.413976},{"id":"r162","row":170,"date":"2026-11-23","dateLabel":"11월 23일","time":"오후중","db":"특관자경정","name":"서부금속산업","area":"충청남도서산시","phone":"041-668-2121","address":"충청남도 서산시 수석산업로 87","memo":"대표랑 통화, 무난한 대화흐름 이어짐, 가족경영이라고함, 대표의 딸과 형제들이 고용산재 보험 가입했고 최근 3년동안 고용산재 보험료 납부했다고함/특관자경정 접수","status":"대기","history":"","lat":36.77459,"lng":126.501215},{"id":"r163","row":171,"date":"2026-11-24","dateLabel":"11월 24일","time":"오전중","db":"경정","name":"동신가설재","area":"충청남도서산시","phone":"041-665-4926","address":"충청남도 서산시 인지면 서해로 3021-8","memo":"남직원과 통화, 무난한 대화흐름 이어짐, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"대기","history":"","lat":36.768377,"lng":126.417545},{"id":"r164","row":172,"date":"2026-11-24","dateLabel":"11월 24일","time":"오전중","db":"경정","name":"서산가구백화점","area":"충청남도서산시","phone":"041-662-3333","address":"충청남도 서산시 벌말1길 46-8","memo":"남직원과 통화, 무난한 대화흐름 이어짐, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"대기","history":"","lat":36.777166,"lng":126.467136},{"id":"r165","row":173,"date":"2026-11-24","dateLabel":"11월 24일","time":"오후중","db":"경정","name":"현대자동차블루핸즈 남부현대서비스","area":"충청남도서산시","phone":"041-668-1188","address":"충청남도 서산시 남부순환로 20-8","memo":"여직원과 통화, 마지막에 통보식으로 접수, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"대기","history":"","lat":36.754159,"lng":126.494168},{"id":"r166","row":174,"date":"2026-11-24","dateLabel":"11월 24일","time":"오후중","db":"경정+특관자","name":"GS더프레시 서산테크노점","area":"충청남도서산시","phone":"041-668-3434","address":"충남 서산시 성연면 성연3로 37","memo":"대표의 가족과 통화, 무난하게 방문에 동의함, 4대보험 가족도 있고 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"대기","history":"","lat":36.822778,"lng":126.451068},{"id":"r167","row":178,"date":"2026-11-26","dateLabel":"11월 26일","time":"오전중","db":"경정","name":"제이텍","area":"충청남도서산시","phone":"041-664-5783","address":"충청남도 서산시 성연면 해성길 83","memo":"여직원과 통화, 무난한 대화흐름 이어짐, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"대기","history":"","lat":36.864108,"lng":126.480536},{"id":"r168","row":179,"date":"2026-11-26","dateLabel":"11월 26일","time":"오전중","db":"경정","name":"해품감태영어조합법인","area":"충청남도서산시","phone":"041-663-9498","address":"충청남도 서산시 지곡면 어름들2길 64","memo":"여직원과 통화, 무난한 대화흐름 이어짐, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"대기","history":"","lat":36.880323,"lng":126.384955},{"id":"r169","row":180,"date":"2026-11-26","dateLabel":"11월 26일","time":"오후중","db":"경정","name":"디에스","area":"충청남도서산시","phone":"041-681-4920","address":"충청남도 서산시 지곡면 무장산업로 229-53","memo":"남직원과 통화, 무난한 대화흐름 이어짐, 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"대기","history":"","lat":36.851819,"lng":126.456157},{"id":"r170","row":181,"date":"2026-11-26","dateLabel":"11월 26일","time":"오후중","db":"경정+특관자","name":"영재","area":"충청남도서산시","phone":"041-668-6291","address":"충청남도 서산시 지곡면 무장산업로 201-38","memo":"여직원과 통화, 무난한 대화흐름 이어짐, 4대보험 가족도 있고 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"대기","history":"","lat":36.8499,"lng":126.457314},{"id":"r171","row":182,"date":"2026-11-27","dateLabel":"11월 27일","time":"오전중","db":"경정","name":"르노코리아 서비스코너 서산석남점","area":"충청남도서산시","phone":"041-665-9274","address":"충청남도 서산시 남부순환로 1002-4","memo":"여직원과 통화, 무난한 대화흐름 이어짐, 4대보험 가족도 있고 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"대기","history":"","lat":36.765504,"lng":126.452986},{"id":"r172","row":183,"date":"2026-11-27","dateLabel":"11월 27일","time":"오전중","db":"경정+특관자","name":"정일품","area":"충청남도서산시","phone":"041-688-9600","address":"충청남도 서산시 해미면 관터로 108","memo":"여직원과 통화, 무난한 대화흐름 이어짐, 4대보험 가족도 있고 남인 19년 이후 채용한 1년 이상 근무한 4대보험 직원 있다고함/간단접수","status":"대기","history":"","lat":36.726113,"lng":126.538561},{"id":"r173","row":184,"date":"2026-11-27","dateLabel":"11월 27일","time":"오후중","db":"경정","name":"이마트24서산해미점","area":"충청남도서산시","phone":"041-688-7675","address":"충남 서산시 해미면 용암휴암길 326","memo":"대표님통화,/무난히 오라고 하심/ 1년이상 4대보험 직원잇다하심/ 가족아님 /간단경정","status":"대기","history":"","lat":36.707702,"lng":126.547695},{"id":"r174","row":185,"date":"2026-11-27","dateLabel":"11월 27일","time":"오후중","db":"경정","name":"헤어살롱더비엠","area":"충청남도서산시","phone":"0507-1376-0164","address":"충남 서산시 성연면 성연2로 6-16 헤어살롱더비엠","memo":"직원분통화,/전달하겟다하심. / 1년이상 4대보험 직원잇다하심/ 가족아님 /간단경정","status":"대기","history":"","lat":36.827894,"lng":126.446043}]}</script>
+
+<header class="topbar">
+  <div class="topbar-row">
+    <div class="brand"><h1>방문 일정 지도</h1><span class="today" id="todayLabel"></span></div>
+    <div class="spacer"></div>
+    <button class="icon-button" id="settingsButton" type="button" aria-expanded="false">⚙ 설정</button>
+  </div>
+  <div class="banner" id="mapBanner" hidden>
+    <span class="banner-text" id="mapBannerText"></span>
+    <button type="button" id="mapBannerAction" hidden></button>
+    <button type="button" id="mapBannerClose" aria-label="안내 닫기">✕</button>
+  </div>
+</header>
+
+<div class="filters">
+  <div class="filter-row">
+    <select class="date-select" id="dateSelect" aria-label="날짜 선택"></select>
+    <div class="segmented" id="period" role="group" aria-label="오전·오후">
+      <button type="button" value="" aria-pressed="true">전체</button>
+      <button type="button" value="오전" aria-pressed="false">오전</button>
+      <button type="button" value="오후" aria-pressed="false">오후</button>
+    </div>
+    <span class="counter" id="counter" role="status"></span>
+  </div>
+  <div class="filter-row">
+    <div class="chips" id="statusChips" role="group" aria-label="진행상황"></div>
+  </div>
+</div>
+
+<main>
+  <section class="panel" id="listPanel" aria-label="방문 일정 목록">
+    <div class="list-head">
+      <h2 id="listHead">일정</h2>
+      <div class="spacer"></div>
+      <button class="ghost" id="selectAll" type="button">이 날짜 전체 선택</button>
+      <button class="ghost" id="clearAll" type="button" disabled>해제</button>
+    </div>
+    <div class="cards" id="cards"></div>
+  </section>
+
+  <section class="panel" id="mapPanel" aria-label="방문 지도">
+    <div id="map" role="application" aria-label="방문지 지도"></div>
+    <div class="map-fallback" id="mapFallback" hidden></div>
+    <div class="map-tools">
+      <button type="button" id="locateButton" title="내 위치 표시" aria-label="내 위치 표시">◎</button>
+      <button type="button" id="fitButton" title="선택한 곳 모두 보기" aria-label="선택한 곳 모두 보기">⤢</button>
+    </div>
+    <p class="map-status" id="mapStatus" role="status" hidden></p>
+  </section>
+</main>
+
+<nav class="tabbar" role="tablist" aria-label="보기 전환">
+  <button type="button" id="tabMap" role="tab" aria-pressed="true">🗺️ 지도</button>
+  <button type="button" id="tabList" role="tab" aria-pressed="false">📋 목록 <span class="count" id="listCount"></span></button>
+</nav>
+
+<div class="settings" id="settings" hidden role="dialog" aria-label="설정">
+  <div class="settings-head">
+    <h2>설정</h2>
+    <div class="spacer"></div>
+    <button class="ghost" type="button" id="settingsClose">닫기</button>
+  </div>
+
+  <fieldset>
+    <legend>네이버 지도 키 (ncpKeyId)</legend>
+    <input type="text" id="keyInput" inputmode="latin" autocomplete="off" spellcheck="false" placeholder="네이버 클라우드 플랫폼 Client ID">
+    <div class="row">
+      <button class="primary" type="button" id="keySave">저장 후 새로고침</button>
+      <button type="button" id="keyClear">키 삭제</button>
+    </div>
+    <p class="note">키가 없거나 인증이 안 되면 오픈스트리트맵 지도로 자동 표시됩니다. 주소·전화·길찾기 버튼은 키와 상관없이 네이버 지도로 열립니다. 주소 <code>?key=…</code> 로도 넣을 수 있어요. (발급: console.ncloud.com → Maps → Application 등록 → Dynamic Map 체크)</p>
+  </fieldset>
+
+  <fieldset>
+    <legend>지도 종류</legend>
+    <div class="row">
+      <button type="button" id="engineNaver">네이버 지도</button>
+      <button type="button" id="engineOsm">오픈스트리트맵</button>
+    </div>
+    <p class="note" id="engineNote">현재: 확인 중</p>
+  </fieldset>
+
+  <fieldset>
+    <legend>일정 데이터</legend>
+    <p class="note" id="dataNote">기본: 같은 폴더의 schedule.json</p>
+    <input type="url" id="sheetUrl" placeholder="공개 구글 시트 CSV 주소 (https://docs.google.com/…/gviz/tq?tqx=out:csv&amp;sheet=시트1)">
+    <div class="row">
+      <button type="button" id="sheetLoad">주소에서 불러오기</button>
+      <label class="file-label">CSV 파일 <input type="file" id="csvFile" accept=".csv,text/csv"></label>
+    </div>
+    <div class="row">
+      <button type="button" id="refreshData">schedule.json 새로고침</button>
+      <button class="warn" type="button" id="resetData">기본 데이터로</button>
+    </div>
+    <p class="note" id="dataStatus"></p>
+  </fieldset>
+</div>
+
+<script>
+(function(){
+  'use strict';
+
+  var STORAGE_KEY = 'visitmap.naverKey';
+  var STORAGE_SOURCE = 'visitmap.sheetSource';
+  var STORAGE_ENGINE = 'visitmap.engine';
+  var STORAGE_VIEW = 'visitmap.view';
+
+  var $ = function(id){ return document.getElementById(id); };
+
+  var state = {
+    rows: [],
+    checked: new Set(),
+    date: '',
+    period: '',
+    statuses: new Set(),   // 비어 있으면 전체
+    view: 'map',
+    location: null,
+    engine: null,
+    engineName: '',
+    naverKey: '',
+    source: null,          // {kind:'json'|'url'|'file', label, url}
+    revision: 0,
+    busy: false
+  };
+
+  var STATUS_ORDER = ['대기', '관리', '승인/관리', '승인/진행거절', '진행거절', '계약완료', '조회완료거절', '거절'];
+
+  /* ── 작은 도구들 ───────────────────────────────────── */
+  function pad(value){ return value < 10 ? '0' + value : String(value); }
+  function ymd(date){ return date.getFullYear() + '-' + pad(date.getMonth() + 1) + '-' + pad(date.getDate()); }
+  function todayKey(){ return ymd(new Date()); }
+  function escapeHtml(text){
+    return String(text == null ? '' : text).replace(/[&<>"']/g, function(ch){
+      return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[ch];
+    });
+  }
+  function el(tag, text, className){
+    var node = document.createElement(tag);
+    if (text != null) node.textContent = text;
+    if (className) node.className = className;
+    return node;
+  }
+  function telHref(phone){ return 'tel:' + String(phone || '').replace(/[^\d+]/g, ''); }
+  function store(key, value){
+    try { if (value == null) localStorage.removeItem(key); else localStorage.setItem(key, value); } catch (error) {}
+  }
+  function read(key){ try { return localStorage.getItem(key); } catch (error) { return null; } }
+
+  /* ── 날짜 해석 ─────────────────────────────────────── */
+  function parseDateText(text){
+    var raw = String(text == null ? '' : text).trim();
+    if (!raw) return '';
+    var match = raw.match(/^(\d{4})\s*[.\-\/년]\s*(\d{1,2})\s*[.\-\/월]\s*(\d{1,2})/);
+    if (match) return safeDate(+match[1], +match[2], +match[3]);
+    match = raw.match(/^(\d{1,2})\s*월\s*(\d{1,2})\s*일/);
+    if (match) return safeDate(new Date().getFullYear(), +match[1], +match[2]);
+    match = raw.match(/^(\d{1,2})\s*[.\-\/]\s*(\d{1,2})\s*\.?$/);
+    if (match) return safeDate(new Date().getFullYear(), +match[1], +match[2]);
+    return '';
+  }
+  function safeDate(year, month, day){
+    if (!(month >= 1 && month <= 12 && day >= 1 && day <= 31)) return '';
+    return year + '-' + pad(month) + '-' + pad(day);
+  }
+  function dateObject(key){
+    var parts = String(key || '').split('-');
+    if (parts.length !== 3) return null;
+    var date = new Date(+parts[0], +parts[1] - 1, +parts[2]);
+    return isNaN(date.getTime()) ? null : date;
+  }
+  function dateLabel(key){
+    var date = dateObject(key);
+    if (!date) return '날짜 미정';
+    var weekday = ['일','월','화','수','목','금','토'][date.getDay()];
+    return (date.getMonth() + 1) + '월 ' + date.getDate() + '일 (' + weekday + ')';
+  }
+  function timeOrder(text){
+    var value = String(text || '');
+    if (value.indexOf('오전') >= 0) return 0;
+    if (value.indexOf('오후') >= 0) return 1;
+    return 2;
+  }
+  function statusRank(status){
+    var index = STATUS_ORDER.indexOf(status);
+    return index < 0 ? 50 : index;
+  }
+
+  /* ── 데이터 정규화 ─────────────────────────────────── */
+  function normalize(raw, index){
+    var date = raw.date || parseDateText(raw.dateLabel || raw.dateText || '');
+    return {
+      id: raw.id || ('c' + index),
+      order: typeof raw.row === 'number' ? raw.row : index,
+      date: date,
+      dateLabel: date ? dateLabel(date) : (raw.dateLabel || '날짜 미정'),
+      time: raw.time || '',
+      db: raw.db || '',
+      name: raw.name || '(업장명 없음)',
+      area: raw.area || '',
+      phone: raw.phone || '',
+      address: raw.address || '',
+      memo: raw.memo || '',
+      status: raw.status || '',
+      history: raw.history || '',
+      lat: typeof raw.lat === 'number' ? raw.lat : null,
+      lng: typeof raw.lng === 'number' ? raw.lng : null,
+      approximate: !!raw.geoApprox
+    };
+  }
+
+  function normalizePayload(payload){
+    var list = Array.isArray(payload) ? payload : (payload && Array.isArray(payload.items) ? payload.items : []);
+    var rows = [];
+    for (var i = 0; i < list.length; i++) {
+      var item = list[i];
+      if (!item) continue;
+      var name = String(item.name == null ? '' : item.name);
+      if (name.indexOf('소화 불가') >= 0) continue;
+      rows.push(normalize(item, i));
+    }
+    return rows;
+  }
+
+  /* ── CSV 파서 (따옴표·줄바꿈 지원) ─────────────────── */
+  function parseCsv(text){
+    var rows = [];
+    var row = [];
+    var cell = '';
+    var quoted = false;
+    var source = String(text == null ? '' : text).replace(/^\uFEFF/, '');
+    for (var i = 0; i < source.length; i++) {
+      var ch = source.charAt(i);
+      if (quoted) {
+        if (ch === '"') {
+          if (source.charAt(i + 1) === '"') { cell += '"'; i++; }
+          else quoted = false;
+        } else cell += ch;
+        continue;
+      }
+      if (ch === '"') { quoted = true; continue; }
+      if (ch === ',') { row.push(cell); cell = ''; continue; }
+      if (ch === '\r') continue;
+      if (ch === '\n') { row.push(cell); rows.push(row); row = []; cell = ''; continue; }
+      cell += ch;
+    }
+    if (cell.length || row.length) { row.push(cell); rows.push(row); }
+    return rows;
+  }
+
+  var CSV_FIELDS = {
+    '날짜': 'dateText', 'db구분': 'db', '미팅시간': 'time', '미팅 시간': 'time',
+    '업장명': 'name', '상호': 'name', '지역': 'area',
+    '업장번호및대표번호': 'phone', '연락처': 'phone', '업장번호': 'phone',
+    '업장주소': 'address', '주소': 'address',
+    '특이사항': 'memo', '비고': 'memo',
+    '진행상황': 'status', '이력등록': 'history'
+  };
+
+  function csvToRows(text){
+    var table = parseCsv(text);
+    if (!table.length) return [];
+    var headerIndex = -1;
+    for (var i = 0; i < Math.min(table.length, 5); i++) {
+      var joined = table[i].join(',').replace(/\s+/g, '');
+      if (joined.indexOf('업장명') >= 0 || joined.indexOf('날짜') >= 0) { headerIndex = i; break; }
+    }
+    if (headerIndex < 0) headerIndex = 0;
+    var header = table[headerIndex].map(function(cell){
+      return String(cell).replace(/\s+/g, '').toLowerCase();
+    });
+    var map = [];
+    for (var h = 0; h < header.length; h++) {
+      map.push(CSV_FIELDS[header[h]] || CSV_FIELDS[header[h].replace(/[()]/g, '')] || '');
+    }
+    var rows = [];
+    for (var r = headerIndex + 1; r < table.length; r++) {
+      var cells = table[r];
+      var item = {};
+      var any = false;
+      for (var c = 0; c < map.length; c++) {
+        var field = map[c];
+        if (!field) continue;
+        var value = String(cells[c] == null ? '' : cells[c]).trim();
+        if (value) any = true;
+        item[field] = value;
+      }
+      if (!any) continue;
+      if (String(item.name || '').indexOf('소화 불가') >= 0) continue;
+      if (!item.name && !item.address) continue;
+      item.date = parseDateText(item.dateText);
+      item.id = 'csv' + (rows.length + 1);
+      rows.push(item);
+    }
+    return normalizePayload(rows);
+  }
+
+  /* ── 목록 정렬·필터 ────────────────────────────────── */
+  function compareRows(a, b){
+    return (a.date || '9999').localeCompare(b.date || '9999') ||
+      timeOrder(a.time) - timeOrder(b.time) ||
+      a.order - b.order;
+  }
+
+  function visibleRows(){
+    var list = state.rows.filter(function(row){
+      if (state.date && row.date !== state.date) return false;
+      if (state.period && String(row.time).indexOf(state.period) < 0) return false;
+      if (state.statuses.size && !state.statuses.has(row.status || '')) return false;
+      return true;
+    });
+    return list.sort(compareRows);
+  }
+
+  function checkedRows(){
+    return state.rows.filter(function(row){ return state.checked.has(row.id); }).sort(compareRows);
+  }
+
+  /* ── 필터 UI ───────────────────────────────────────── */
+  function dateOptions(){
+    var counts = {};
+    var keys = [];
+    state.rows.forEach(function(row){
+      if (!row.date) return;
+      if (!counts[row.date]) { counts[row.date] = 0; keys.push(row.date); }
+      counts[row.date]++;
+    });
+    keys.sort();
+    var today = todayKey();
+    var options = [];
+
+    var all = el('option', '전체 날짜');
+    all.value = '';
+    options.push(all);
+
+    keys.forEach(function(key){
+      var suffix = counts[key] + '건';
+      var name = dateLabel(key) + ' · ' + suffix;
+      if (key === today) name = '오늘 · ' + name;
+      var option = el('option', name);
+      option.value = key;
+      options.push(option);
+    });
+    return options;
+  }
+
+  function defaultDate(){
+    var today = todayKey();
+    var dates = {};
+    state.rows.forEach(function(row){ if (row.date) dates[row.date] = true; });
+    var keys = Object.keys(dates).sort();
+    if (!keys.length) return '';
+    if (dates[today]) return today;
+    var upcoming = keys.filter(function(key){ return key > today; });
+    if (upcoming.length) return upcoming[0];
+    return keys[keys.length - 1];
+  }
+
+  function renderFilters(){
+    var select = $('dateSelect');
+    var previous = state.date;
+    var options = dateOptions();
+    select.replaceChildren.apply(select, options);
+    var exists = options.some(function(option){ return option.value === previous; });
+    if (!exists) state.date = defaultDate();
+    select.value = state.date;
+    if (select.value !== state.date) state.date = select.value;
+
+    var chips = $('statusChips');
+    var counts = {};
+    state.rows.forEach(function(row){
+      var key = row.status || '';
+      if (!key) return;
+      counts[key] = (counts[key] || 0) + 1;
+    });
+    var names = Object.keys(counts).sort(function(a, b){
+      return statusRank(a) - statusRank(b) || a.localeCompare(b, 'ko');
+    });
+    var nodes = [];
+    var allChip = el('button', '전체');
+    allChip.type = 'button';
+    allChip.className = 'chip';
+    allChip.setAttribute('aria-pressed', String(state.statuses.size === 0));
+    allChip.onclick = function(){ state.statuses.clear(); renderFilters(); render(); queueMap(); };
+    nodes.push(allChip);
+
+    names.forEach(function(name){
+      var chip = el('button', name + ' ' + counts[name]);
+      chip.type = 'button';
+      chip.className = 'chip';
+      chip.setAttribute('aria-pressed', String(state.statuses.has(name)));
+      chip.onclick = function(){
+        if (state.statuses.has(name)) state.statuses.delete(name);
+        else state.statuses.add(name);
+        renderFilters();
+        render();
+        queueMap();
+      };
+      nodes.push(chip);
+    });
+    chips.replaceChildren.apply(chips, nodes);
+  }
+
+  /* ── 목록 렌더 ─────────────────────────────────────── */
+  function statusClass(status){
+    if (status.indexOf('대기') >= 0) return 'tag wait';
+    if (status.indexOf('관리') >= 0) return 'tag manage';
+    if (status.indexOf('계약완료') >= 0) return 'tag done';
+    if (status.indexOf('거절') >= 0) return 'tag reject';
+    return 'tag';
+  }
+
+  function naverSearchUrl(row){
+    var query = row.address || row.name;
+    return 'https://map.naver.com/p/search/' + encodeURIComponent(query);
+  }
+
+  function naverDirectionsUrl(row){
+    var query = encodeURIComponent(row.address || row.name);
+    if (row.lat == null || row.lng == null) return 'https://map.naver.com/p/search/' + query;
+    var radius = 6378137;
+    var rad = Math.PI / 180;
+    var x = radius * row.lng * rad;
+    var y = radius * Math.log(Math.tan(Math.PI / 4 + row.lat * rad / 2));
+    var destination = [x.toFixed(6), y.toFixed(6), query, '', 'ADDRESS_POI'].join(',');
+    return 'https://map.naver.com/p/directions/-/' + destination + '/-/car';
+  }
+
+  function cardFor(row, numbers){
+    var card = el('article', null, 'card');
+    card.dataset.id = row.id;
+    if (state.checked.has(row.id)) card.classList.add('picked');
+
+    var top = el('div', null, 'card-top');
+    var pick = el('label', null, 'pick');
+    pick.setAttribute('aria-label', row.name + ' 지도에 표시');
+    var box = document.createElement('input');
+    box.type = 'checkbox';
+    box.checked = state.checked.has(row.id);
+    box.onchange = function(){
+      if (box.checked) state.checked.add(row.id); else state.checked.delete(row.id);
+      card.classList.toggle('picked', box.checked);
+      syncSelection();
+    };
+    pick.append(box);
+
+    var badge = el('span', null, 'badge');
+    badge.dataset.badge = row.id;
+    var number = numbers.get(row.id);
+    if (number) badge.textContent = String(number); else badge.hidden = true;
+
+    var main = el('div', null, 'card-main');
+    var title = el('div', null, 'card-title');
+    title.append(el('h3', row.name));
+    if (row.status) title.append(el('span', row.status, statusClass(row.status)));
+    main.append(title);
+
+    var metaParts = [];
+    if (state.date === '') metaParts.push(row.dateLabel);
+    if (row.time) metaParts.push(row.time);
+    if (row.db) metaParts.push(row.db);
+    if (row.area) metaParts.push(row.area);
+    main.append(el('p', metaParts.join(' · '), 'meta'));
+
+    if (row.address) {
+      var addr = el('div', null, 'addr');
+      var link = el('a', row.address);
+      link.href = naverSearchUrl(row);
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      addr.append(link);
+      if (row.approximate) addr.append(el('span', '대략 위치', 'near'));
+      main.append(addr);
+    }
+
+    if (row.memo) {
+      var memo = el('p', row.memo, 'memo');
+      main.append(memo);
+      if (row.memo.length > 70) {
+        var more = el('button', '더보기', 'more');
+        more.type = 'button';
+        more.onclick = function(){
+          memo.classList.toggle('open');
+          more.textContent = memo.classList.contains('open') ? '접기' : '더보기';
+        };
+        main.append(more);
+      }
+    }
+    if (row.history) {
+      var history = el('p', null, 'history');
+      var label = el('b', '이력 · ');
+      history.append(label, document.createTextNode(row.history));
+      main.append(history);
+    }
+
+    var actions = el('div', null, 'card-actions');
+    if (row.phone) {
+      var call = el('a', '📞 ' + row.phone, 'act call');
+      call.href = telHref(row.phone);
+      actions.append(call);
+    }
+    var place = el('a', '🧭 네이버 지도', 'act map');
+    place.href = naverSearchUrl(row);
+    place.target = '_blank';
+    place.rel = 'noopener noreferrer';
+    actions.append(place);
+
+    var route = el('a', '🚗 자동차 길찾기', 'act');
+    route.href = naverDirectionsUrl(row);
+    route.target = '_blank';
+    route.rel = 'noopener noreferrer';
+    actions.append(route);
+
+    main.append(actions);
+    top.append(pick, badge, main);
+    card.append(top);
+    return card;
+  }
+
+  function render(){
+    var rows = visibleRows();
+    var numbers = new Map();
+    checkedRows().forEach(function(row, index){ numbers.set(row.id, index + 1); });
+
+    var cards = $('cards');
+    var nodes = [];
+    var lastDate = null;
+    rows.forEach(function(row){
+      if (state.date === '' && row.date !== lastDate) {
+        lastDate = row.date;
+        nodes.push(el('div', row.dateLabel, 'date-sep'));
+      }
+      nodes.push(cardFor(row, numbers));
+    });
+    if (!nodes.length) {
+      nodes.push(el('p', '조건에 맞는 일정이 없습니다.\n다른 날짜나 진행상황을 골라 보세요.', 'empty'));
+    }
+    cards.replaceChildren.apply(cards, nodes);
+
+    $('counter').textContent = rows.length + '건';
+    $('listCount').textContent = rows.length ? '(' + rows.length + ')' : '';
+    $('listHead').textContent = state.date ? dateLabel(state.date) : '전체 일정';
+    $('selectAll').disabled = !rows.length;
+    $('clearAll').disabled = !state.checked.size;
+    $('fitButton').disabled = !state.checked.size && !state.location;
+    updateCheckedNumbers();
+  }
+
+  function updateCheckedNumbers(){
+    var numbers = new Map();
+    checkedRows().forEach(function(row, index){ numbers.set(row.id, index + 1); });
+    var badges = document.querySelectorAll('[data-badge]');
+    for (var i = 0; i < badges.length; i++) {
+      var id = badges[i].getAttribute('data-badge');
+      if (numbers.has(id)) {
+        badges[i].textContent = String(numbers.get(id));
+        badges[i].hidden = false;
+      } else {
+        badges[i].hidden = true;
+        badges[i].textContent = '';
+      }
+    }
+    $('clearAll').disabled = !state.checked.size;
+    $('fitButton').disabled = !state.checked.size && !state.location;
+  }
+
+  function syncSelection(){
+    updateCheckedNumbers();
+    queueMap();
+  }
+
+  /* ── 지도 엔진 ─────────────────────────────────────── */
+  function pinSize(label){
+    var width = Math.max(28, String(label).length * 9 + 16);
+    return { width: width, height: 28 };
+  }
+
+  function popupHtml(entry){
+    var parts = ['<div class="popup"><strong>' + escapeHtml(entry.title) + '</strong>'];
+    if (entry.address) parts.push('<p>' + escapeHtml(entry.address) + '</p>');
+    if (entry.meta) parts.push('<p>' + escapeHtml(entry.meta) + '</p>');
+    parts.push('<div class="links"><a href="' + escapeHtml(entry.search) + '" target="_blank" rel="noopener noreferrer">네이버 지도</a>');
+    parts.push('<a href="' + escapeHtml(entry.route) + '" target="_blank" rel="noopener noreferrer">자동차 길찾기</a></div></div>');
+    return parts.join('');
+  }
+
+  function markerEntries(){
+    var rows = checkedRows();
+    var entries = rows.map(function(row, index){
+      return {
+        key: row.id,
+        lat: row.lat,
+        lng: row.lng,
+        label: String(index + 1),
+        title: (index + 1) + '. ' + row.name,
+        address: row.address,
+        meta: [row.dateLabel, row.time, row.status].filter(Boolean).join(' · '),
+        search: naverSearchUrl(row),
+        route: naverDirectionsUrl(row),
+        phone: row.phone || ''
+      };
+    });
+    if (state.location) {
+      entries.push({
+        key: 'current', lat: state.location.lat, lng: state.location.lng, label: '●',
+        title: '내 위치', address: '', meta: '', search: '', route: '', current: true
+      });
+    }
+    return entries;
+  }
+
+  function osmEngine(){
+    if (!window.L) return null;
+    var view = window.L.map('map', { zoomControl: true, attributionControl: true }).setView([36.5, 127.6], 7);
+    window.L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19, attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(view);
+    var markers = [];
+    var info = null;
+    return {
+      name: 'osm',
+      setMarkers: function(entries){
+        markers.forEach(function(marker){ view.removeLayer(marker); });
+        markers = [];
+        if (info) { view.removeLayer(info); info = null; }
+        entries.forEach(function(entry){
+          if (entry.lat == null || entry.lng == null) return;
+          var size = pinSize(entry.label);
+          var icon = window.L.divIcon({
+            className: '',
+            html: '<div class="pin' + (entry.current ? ' current' : '') + '">' + escapeHtml(entry.label) + '</div>',
+            iconSize: [size.width, size.height],
+            iconAnchor: [size.width / 2, size.height / 2]
+          });
+          var marker = window.L.marker([entry.lat, entry.lng], { icon: icon, title: entry.title, zIndexOffset: entry.current ? 1000 : 100 }).addTo(view);
+          if (!entry.current) {
+            marker.bindPopup(popupHtml(entry));
+          }
+          markers.push(marker);
+        });
+      },
+      fit: function(points){
+        if (!points.length) return;
+        if (points.length === 1) { view.setView([points[0].lat, points[0].lng], 15); return; }
+        var bounds = window.L.latLngBounds(points.map(function(point){ return [point.lat, point.lng]; }));
+        view.fitBounds(bounds, { padding: [45, 45], maxZoom: 16 });
+      },
+      invalidate: function(){ view.invalidateSize(); }
+    };
+  }
+
+  function naverEngine(){
+    if (!window.naver || !window.naver.maps) return null;
+    var maps = window.naver.maps;
+    var container = $('map');
+    var view = new maps.Map(container, {
+      center: new maps.LatLng(36.5, 127.6),
+      zoom: 7,
+      mapDataControl: false,
+      scaleControl: false,
+      logoControlOptions: { position: maps.Position.BOTTOM_LEFT },
+      mapTypeControl: false,
+      zoomControl: true,
+      zoomControlOptions: { position: maps.Position.RIGHT_CENTER }
+    });
+    var markers = [];
+    var infoWindow = new maps.InfoWindow({ pixelOffset: new maps.Point(0, -14) });
+    return {
+      name: 'naver',
+      setMarkers: function(entries){
+        markers.forEach(function(marker){ marker.setMap(null); });
+        markers = [];
+        infoWindow.close();
+        entries.forEach(function(entry){
+          if (entry.lat == null || entry.lng == null) return;
+          var size = pinSize(entry.label);
+          var marker = new maps.Marker({
+            position: new maps.LatLng(entry.lat, entry.lng),
+            map: view,
+            title: entry.title,
+            zIndex: entry.current ? 1000 : 100,
+            icon: {
+              content: '<div class="pin' + (entry.current ? ' current' : '') + '">' + escapeHtml(entry.label) + '</div>',
+              anchor: new maps.Point(size.width / 2, size.height / 2)
+            }
+          });
+          if (!entry.current) {
+            maps.Event.addListener(marker, 'click', function(){
+              infoWindow.setContent(popupHtml(entry));
+              infoWindow.open(view, marker);
+            });
+          }
+          markers.push(marker);
+        });
+      },
+      fit: function(points){
+        if (!points.length) return;
+        if (points.length === 1) {
+          view.setCenter(new maps.LatLng(points[0].lat, points[0].lng));
+          view.setZoom(15);
+          return;
+        }
+        var bounds = new maps.LatLngBounds();
+        points.forEach(function(point){ bounds.extend(new maps.LatLng(point.lat, point.lng)); });
+        view.fitBounds(bounds, { top: 45, right: 45, bottom: 45, left: 45 });
+        if (view.getZoom() > 16) view.setZoom(16);
+      },
+      invalidate: function(){ view.refresh(); }
+    };
+  }
+
+  function loadScript(src, check){
+    return new Promise(function(resolve, reject){
+      if (check()) { resolve(); return; }
+      var script = document.createElement('script');
+      var settled = false;
+      var timer = setTimeout(function(){
+        if (settled) return;
+        settled = true;
+        reject(new Error('시간 초과'));
+      }, 12000);
+      script.onload = function(){
+        clearTimeout(timer);
+        if (settled) return;
+        settled = true;
+        if (check()) resolve(); else reject(new Error('스크립트가 지도 기능을 준비하지 못했습니다'));
+      };
+      script.onerror = function(){
+        clearTimeout(timer);
+        if (settled) return;
+        settled = true;
+        reject(new Error('스크립트를 내려받지 못했습니다'));
+      };
+      script.src = src;
+      document.head.appendChild(script);
+    });
+  }
+
+  function loadLeaflet(){
+    if (window.L) return Promise.resolve();
+    var css = document.createElement('link');
+    css.rel = 'stylesheet';
+    css.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+    document.head.appendChild(css);
+    return loadScript('https://unpkg.com/leaflet@1.9.4/dist/leaflet.js', function(){ return !!window.L; });
+  }
+
+  function loadNaver(key){
+    if (window.naver && window.naver.maps) return Promise.resolve();
+    var url = 'https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=' + encodeURIComponent(key);
+    return loadScript(url, function(){ return !!(window.naver && window.naver.maps); });
+  }
+
+  function showBanner(text, tone, actionText, action){
+    var banner = $('mapBanner');
+    banner.hidden = false;
+    banner.className = 'banner' + (tone ? ' ' + tone : '');
+    $('mapBannerText').textContent = text;
+    var button = $('mapBannerAction');
+    if (actionText && action) {
+      button.hidden = false;
+      button.textContent = actionText;
+      button.onclick = action;
+    } else {
+      button.hidden = true;
+      button.onclick = null;
+    }
+    $('mapBannerClose').onclick = function(){ banner.hidden = true; };
+  }
+
+  function setMapStatus(text){
+    var node = $('mapStatus');
+    if (!text) { node.hidden = true; node.textContent = ''; return; }
+    node.hidden = false;
+    node.textContent = text;
+  }
+
+  function showMapFallbackMessage(text){
+    var node = $('mapFallback');
+    node.hidden = false;
+    node.textContent = text;
+  }
+
+  function hideMapFallbackMessage(){ $('mapFallback').hidden = true; }
+
+  function wantEngine(){
+    var forced = read(STORAGE_ENGINE) || '';
+    if (forced === 'osm') return 'osm';
+    if (forced === 'naver') return 'naver';
+    return state.naverKey ? 'naver' : 'osm';
+  }
+
+  function initMap(){
+    var target = wantEngine();
+    if (target === 'naver' && state.naverKey) {
+      setMapStatus('네이버 지도를 불러오는 중입니다.');
+      loadNaver(state.naverKey).then(function(){
+        clearMapContainer();
+        var engine = naverEngine();
+        if (!engine) throw new Error('네이버 지도 인증 실패');
+        applyEngine(engine);
+        watchNaverTiles();
+      }).catch(function(error){
+        useOsm('네이버 지도 인증에 실패했습니다(' + error.message + '). 오픈스트리트맵 지도로 표시합니다.', true);
+      });
+      return;
+    }
+    useOsm('', false);
+  }
+
+  function clearMapContainer(){
+    var container = $('map');
+    container.replaceChildren();
+  }
+
+  function watchNaverTiles(){
+    setTimeout(function(){
+      if (!state.engine || state.engine.name !== 'naver') return;
+      var container = $('map');
+      var painted = container.querySelectorAll('img').length + container.querySelectorAll('canvas').length;
+      if (painted === 0) {
+        useOsm('네이버 지도가 그려지지 않았습니다(키 인증 확인 필요). 오픈스트리트맵으로 표시합니다.', true);
+      } else {
+        setMapStatus('');
+      }
+    }, 6000);
+  }
+
+  function applyEngine(engine){
+    state.engine = engine;
+    state.engineName = engine.name;
+    hideMapFallbackMessage();
+    setMapStatus('');
+    $('engineNote').textContent = '현재: ' + (engine.name === 'naver' ? '네이버 지도' : '오픈스트리트맵 (Leaflet)');
+    drawMap();
+  }
+
+  function useOsm(message, withNaverReset){
+    loadLeaflet().then(function(){
+      clearMapContainer();
+      var engine = osmEngine();
+      if (!engine) throw new Error('지도 라이브러리를 준비하지 못했습니다');
+      applyEngine(engine);
+      if (message) {
+        showBanner(message + (state.naverKey ? '' : ' 설정에서 네이버 지도 키를 넣으면 진짜 네이버 지도로 표시됩니다.'),
+          'bad', withNaverReset ? '네이버 키 넣기' : '키 넣기', function(){ openSettings(); $('keyInput').focus(); });
+      } else if (!state.naverKey) {
+        showBanner('지금은 오픈스트리트맵 지도입니다. 네이버 지도 키(ncpKeyId)를 넣으면 네이버 지도로 바뀝니다.', '',
+          '키 넣기', function(){ openSettings(); $('keyInput').focus(); });
+      } else {
+        showBanner('오픈스트리트맵 지도로 표시 중입니다.', 'ok', '설정', function(){ openSettings(); });
+      }
+    }).catch(function(error){
+      state.engine = null;
+      showMapFallbackMessage('지도를 불러오지 못했습니다(' + error.message + '). 인터넷 연결을 확인해 주세요. 아래 목록의 주소·길찾기 링크는 그대로 쓸 수 있습니다.');
+      setMapStatus('');
+    });
+  }
+
+  function queueMap(){
+    var request = ++state.revision;
+    updateCheckedNumbers();
+    if (!state.engine) return;
+    setTimeout(function(){ if (request === state.revision) drawMap(); }, 120);
+  }
+
+  var geocodeCache = {};
+  function geocode(address){
+    var key = String(address || '').trim();
+    if (!key) return Promise.resolve(null);
+    if (geocodeCache[key] !== undefined) return Promise.resolve(geocodeCache[key]);
+    var params = new URLSearchParams({
+      SingleLine: key, f: 'json', maxLocations: '3', sourceCountry: 'KOR', outFields: 'Addr_type', forStorage: 'false'
+    });
+    return fetch('https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/findAddressCandidates?' + params.toString(),
+      { cache: 'no-store' })
+      .then(function(response){ return response.ok ? response.json() : null; })
+      .then(function(data){
+        var candidates = (data && data.candidates) || [];
+        for (var i = 0; i < candidates.length; i++) {
+          var point = candidates[i];
+          var score = Number(point.score || 0);
+          var kind = (point.attributes && point.attributes.Addr_type) || '';
+          if (score >= 85 && /Point|Subaddress|Street/.test(kind) && point.location && isFinite(point.location.x)) {
+            var found = { lat: point.location.y, lng: point.location.x };
+            geocodeCache[key] = found;
+            return found;
+          }
+        }
+        geocodeCache[key] = null;
+        return null;
+      })
+      .catch(function(){ geocodeCache[key] = null; return null; });
+  }
+
+  function drawMap(){
+    var engine = state.engine;
+    if (!engine) return;
+    var rows = checkedRows();
+    var missing = rows.filter(function(row){ return row.lat == null || row.lng == null; });
+    if (!missing.length && !state.location) {
+      engine.setMarkers(markerEntries());
+      var points = rows.filter(function(row){ return row.lat != null; });
+      if (points.length) {
+        engine.fit(points);
+        setMapStatus(points.length + '곳 표시' + (rows.length - points.length ? ' · 위치 미확인 ' + (rows.length - points.length) + '곳' : ''));
+      } else {
+        setMapStatus(state.checked.size ? '선택한 일정의 위치를 찾지 못했습니다.' : '일정을 체크하면 지도에 번호로 표시됩니다.');
+      }
+      return;
+    }
+
+    setMapStatus('주소를 확인하는 중입니다…');
+    var chain = Promise.resolve();
+    missing.forEach(function(row){
+      chain = chain.then(function(){
+        if (row.lat != null) return null;
+        return geocode(row.address).then(function(point){
+          if (point) { row.lat = point.lat; row.lng = point.lng; }
+        });
+      });
+    });
+    var request = state.revision;
+    chain.then(function(){
+      if (request !== state.revision || !state.engine) return;
+      engine.setMarkers(markerEntries());
+      var plotted = checkedRows().filter(function(row){ return row.lat != null; });
+      var points = plotted.slice();
+      if (state.location) points.push(state.location);
+      if (points.length) engine.fit(points);
+      var unresolved = checkedRows().filter(function(row){ return row.lat == null; });
+      var text = '';
+      if (plotted.length) text = plotted.length + '곳 표시';
+      if (unresolved.length) {
+        text += (text ? ' · ' : '') + '주소 확인 필요: ' + unresolved.map(function(row){ return row.name; }).join(', ');
+        setMapStatus(text);
+        if (unresolved.length) suggestAddressFix(unresolved);
+      } else if (text) {
+        setMapStatus(text);
+      } else {
+        setMapStatus(state.checked.size ? '주소를 찾지 못했습니다. 목록의 네이버 지도 링크를 눌러 주세요.' : '일정을 체크하면 지도에 번호로 표시됩니다.');
+      }
+    });
+  }
+
+  function suggestAddressFix(rows){
+    if (searchSuggestionDone) return;
+    searchSuggestionDone = true;
+    showBanner('위치를 못 찾은 곳: ' + rows.map(function(row){ return row.name; }).join(', ') + ' — 주소를 확인한 뒤 시트에서 고쳐 주세요.', '', '', null);
+  }
+  var searchSuggestionDone = false;
+
+  /* ── 내 위치 ───────────────────────────────────────── */
+  function locate(){
+    var button = $('locateButton');
+    if (!navigator.geolocation) {
+      setMapStatus('이 브라우저에서는 위치를 쓸 수 없습니다.');
+      return;
+    }
+    button.disabled = true;
+    setMapStatus('현재 위치를 확인하는 중입니다…');
+    navigator.geolocation.getCurrentPosition(function(position){
+      state.location = { lat: position.coords.latitude, lng: position.coords.longitude };
+      button.disabled = false;
+      drawMap();
+      setMapStatus('파란 점이 내 위치입니다(정확도 약 ' + Math.round(position.coords.accuracy) + 'm).');
+    }, function(error){
+      button.disabled = false;
+      setMapStatus(error && error.code === 1
+        ? '브라우저 설정에서 위치 권한을 허용한 뒤 다시 눌러 주세요.'
+        : '현재 위치를 찾지 못했습니다. 잠시 뒤 다시 시도해 주세요.');
+    }, { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 });
+  }
+
+  /* ── 설정·데이터 ───────────────────────────────────── */
+  function openSettings(){
+    $('settings').hidden = false;
+    $('settingsButton').setAttribute('aria-expanded', 'true');
+    $('keyInput').value = state.naverKey;
+    $('engineNote').textContent = '현재: ' + (state.engineName === 'naver' ? '네이버 지도' : state.engineName === 'osm' ? '오픈스트리트맵' : '확인 중');
+    $('dataNote').textContent = '현재 데이터: ' + (state.source ? state.source.label : 'schedule.json');
+  }
+  function closeSettings(){
+    $('settings').hidden = true;
+    $('settingsButton').setAttribute('aria-expanded', 'false');
+  }
+
+  function applyKey(key, reload){
+    store(STORAGE_KEY, key || null);
+    state.naverKey = key || '';
+    store(STORAGE_ENGINE, key ? null : 'osm');
+    if (reload) window.location.reload();
+  }
+
+  function setRows(rows, source){
+    state.rows = rows;
+    state.checked.clear();
+    state.source = source;
+    state.date = defaultDate();
+    renderFilters();
+    render();
+    queueMap();
+  }
+
+  function loadDefaultData(manual){
+    if (manual) $('dataStatus').textContent = 'schedule.json을 불러오는 중…';
+    var inline = document.getElementById('inlineSchedule');
+    if (inline && inline.textContent) {
+      try {
+        var embedded = JSON.parse(inline.textContent);
+        var embeddedRows = normalizePayload(embedded);
+        if (embeddedRows.length) {
+          setRows(embeddedRows, { kind: 'inline', label: '내장 데이터 (' + embeddedRows.length + '건)' });
+          $('dataStatus').textContent = '내장된 일정 ' + embeddedRows.length + '건을 불러왔습니다.';
+          return Promise.resolve(embeddedRows);
+        }
+      } catch (error) {}
+    }
+    return fetch('schedule.json?v=' + Date.now(), { cache: 'no-store' })
+      .then(function(response){
+        if (!response.ok) throw new Error('HTTP ' + response.status);
+        return response.json();
+      })
+      .then(function(payload){
+        var rows = normalizePayload(payload);
+        if (!rows.length) throw new Error('일정이 비어 있습니다');
+        setRows(rows, { kind: 'json', label: 'schedule.json (' + rows.length + '건)' });
+        if (manual) $('dataStatus').textContent = 'schedule.json에서 ' + rows.length + '건을 불러왔습니다.';
+        return rows;
+      })
+      .catch(function(error){
+        $('dataStatus').textContent = '기본 데이터를 불러오지 못했습니다(' + error.message + '). 주소로 시트 CSV를 넣어 보세요.';
+        if (!state.rows.length) {
+          $('cards').replaceChildren(el('p', '일정을 불러오지 못했습니다. 설정에서 시트 CSV 주소나 파일을 넣어 주세요.', 'empty'));
+        }
+      });
+  }
+
+  function loadFromUrl(url){
+    $('dataStatus').textContent = '시트를 불러오는 중…';
+    return fetch(url, { cache: 'no-store' })
+      .then(function(response){
+        if (!response.ok) throw new Error('HTTP ' + response.status);
+        return response.text();
+      })
+      .then(function(text){
+        var rows = csvToRows(text);
+        if (!rows.length) throw new Error('CSV에서 일정을 찾지 못했습니다');
+        store(STORAGE_SOURCE, url);
+        setRows(rows, { kind: 'url', label: '시트 CSV (' + rows.length + '건)', url: url });
+        $('dataStatus').textContent = rows.length + '건을 불러왔습니다. 이 주소는 저장되어 다음에 열 때도 씁니다.';
+      })
+      .catch(function(error){
+        $('dataStatus').textContent = '불러오지 못했습니다(' + error.message + '). 시트가 "링크 있는 모든 사용자 보기"인지, 주소가 gviz CSV 주소인지 확인해 주세요.';
+      });
+  }
+
+  function loadFromFile(file){
+    var reader = new FileReader();
+    reader.onload = function(){
+      var rows = csvToRows(reader.result);
+      if (!rows.length) { $('dataStatus').textContent = 'CSV에서 일정을 찾지 못했습니다.'; return; }
+      store(STORAGE_SOURCE, null);
+      setRows(rows, { kind: 'file', label: file.name + ' (' + rows.length + '건)' });
+      $('dataStatus').textContent = file.name + '에서 ' + rows.length + '건을 불러왔습니다.';
+    };
+    reader.onerror = function(){ $('dataStatus').textContent = '파일을 읽지 못했습니다.'; };
+    reader.readAsText(file, 'utf-8');
+  }
+
+  /* ── 이벤트 연결 ───────────────────────────────────── */
+  function bind(){
+    $('dateSelect').addEventListener('change', function(event){
+      state.date = event.target.value;
+      render();
+      queueMap();
+      if (window.innerWidth <= 800 && state.checked.size) setView('map');
+    });
+
+    var periodButtons = $('period').querySelectorAll('button');
+    Array.prototype.forEach.call(periodButtons, function(button){
+      button.addEventListener('click', function(){
+        state.period = button.value;
+        Array.prototype.forEach.call(periodButtons, function(other){
+          other.setAttribute('aria-pressed', String(other === button));
+        });
+        render();
+        queueMap();
+      });
+    });
+
+    $('selectAll').addEventListener('click', function(){
+      var today = state.date && state.date === todayKey();
+      var rows = visibleRows();
+      var candidates = today ? rows.filter(function(row){ return row.status.indexOf('대기') >= 0; }) : rows;
+      if (!candidates.length) candidates = rows;
+      candidates.forEach(function(row){ state.checked.add(row.id); });
+      render();
+      queueMap();
+      setView('map');
+    });
+
+    $('clearAll').addEventListener('click', function(){
+      state.checked.clear();
+      render();
+      queueMap();
+    });
+
+    $('locateButton').addEventListener('click', locate);
+
+    $('fitButton').addEventListener('click', function(){
+      if (!state.engine) return;
+      var points = checkedRows().filter(function(row){ return row.lat != null; });
+      if (state.location) points.push(state.location);
+      state.engine.fit(points);
+    });
+
+    $('tabMap').addEventListener('click', function(){ setView('map'); });
+    $('tabList').addEventListener('click', function(){ setView('list'); });
+
+    $('settingsButton').addEventListener('click', function(){
+      if ($('settings').hidden) openSettings(); else closeSettings();
+    });
+    $('settingsClose').addEventListener('click', closeSettings);
+
+    $('keySave').addEventListener('click', function(){
+      var value = $('keyInput').value.trim();
+      applyKey(value, true);
+    });
+    $('keyClear').addEventListener('click', function(){ applyKey('', true); });
+
+    $('engineNaver').addEventListener('click', function(){
+      if (!state.naverKey) {
+        $('engineNote').textContent = '네이버 지도를 쓰려면 아래 키를 먼저 넣어 주세요.';
+        $('keyInput').focus();
+        return;
+      }
+      store(STORAGE_ENGINE, 'naver');
+      window.location.reload();
+    });
+    $('engineOsm').addEventListener('click', function(){
+      store(STORAGE_ENGINE, 'osm');
+      window.location.reload();
+    });
+
+    $('sheetLoad').addEventListener('click', function(){
+      var url = $('sheetUrl').value.trim();
+      if (!url) { $('dataStatus').textContent = '시트 CSV 주소를 넣어 주세요.'; return; }
+      loadFromUrl(url);
+    });
+    $('csvFile').addEventListener('change', function(event){
+      var file = event.target.files && event.target.files[0];
+      if (file) loadFromFile(file);
+    });
+    $('refreshData').addEventListener('click', function(){
+      store(STORAGE_SOURCE, null);
+      $('sheetUrl').value = '';
+      loadDefaultData(true);
+    });
+    $('resetData').addEventListener('click', function(){
+      store(STORAGE_SOURCE, null);
+      $('sheetUrl').value = '';
+      loadDefaultData(true);
+    });
+
+    document.addEventListener('keydown', function(event){
+      if (event.key === 'Escape' && !$('settings').hidden) closeSettings();
+    });
+
+    window.addEventListener('resize', function(){
+      if (state.engine && state.engine.invalidate) state.engine.invalidate();
+    });
+  }
+
+  function setView(view){
+    state.view = view;
+    store(STORAGE_VIEW, view);
+    document.body.setAttribute('data-view', view);
+    $('tabMap').setAttribute('aria-pressed', String(view === 'map'));
+    $('tabList').setAttribute('aria-pressed', String(view === 'list'));
+    if (view === 'map' && state.engine && state.engine.invalidate) {
+      setTimeout(function(){ state.engine.invalidate(); queueMap(); }, 60);
+    }
+  }
+
+  /* ── 시작 ──────────────────────────────────────────── */
+  function boot(){
+    var url = new URL(window.location.href);
+    var paramKey = url.searchParams.get('key');
+    if (paramKey) {
+      state.naverKey = paramKey.trim();
+      store(STORAGE_KEY, state.naverKey);
+      url.searchParams.delete('key');
+      var query = url.searchParams.toString();
+      try { window.history.replaceState({}, document.title, url.pathname + (query ? '?' + query : '') + (url.hash || '')); } catch (error) {}
+    } else {
+      state.naverKey = read(STORAGE_KEY) || '';
+    }
+
+    var today = new Date();
+    $('todayLabel').textContent = today.getFullYear() + '년 ' + (today.getMonth() + 1) + '월 ' + today.getDate() + '일 ' +
+      ['일','월','화','수','목','금','토'][today.getDay()] + '요일';
+
+    bind();
+    setView(window.innerWidth > 800 ? 'map' : (read(STORAGE_VIEW) === 'list' ? 'list' : 'map'));
+    if (window.innerWidth > 800) setView('map');
+
+    var savedSource = read(STORAGE_SOURCE);
+    if (savedSource) {
+      $('sheetUrl').value = savedSource;
+      loadFromUrl(savedSource).then(function(){ initMap(); });
+    } else {
+      loadDefaultData(false).then(function(){ initMap(); });
+    }
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+  else boot();
+})();
+</script>
+</body>
+</html>
