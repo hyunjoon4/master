@@ -295,7 +295,7 @@ function __drain(){}
 """
 
 
-def run(page_html, schedule_json, csv_text, key, expect_naver, workdir, inline_json=None):
+def run(page_html, schedule_json, csv_text, key, expect_naver, workdir, inline_json=None, storage=None):
     scripts = re.findall(r"<script>(.*?)</script>", page_html, re.S)
     assert len(scripts) == 1, "예상과 다른 script 블록 수: %d" % len(scripts)
     body = scripts[0]
@@ -308,6 +308,9 @@ def run(page_html, schedule_json, csv_text, key, expect_naver, workdir, inline_j
     ctx.set("__csvText", csv_text)
     ctx.eval("window.L = makeFakeLeaflet(); window.naver = %s;" % ("makeFakeNaver()" if expect_naver else "null"))
     ctx.eval("window.L = makeFakeLeaflet();" if not expect_naver else "")
+    if storage:
+        ctx.set("__storageInit", json.dumps(storage))
+        ctx.eval("var __init = JSON.parse(__storageInit); for (var k in __init) if (Object.prototype.hasOwnProperty.call(__init, k)) __storage[k] = __init[k];")
     if key:
         ctx.set("__keyValue", key)
         ctx.eval("__setKeyHref(__keyValue);")
@@ -351,8 +354,16 @@ def main():
         checks.append((name, bool(ok), detail))
         print(("PASS " if ok else "FAIL ") + name + ((" — " + str(detail)) if detail and not ok else ""))
 
-    # ── 1. 키 없이 실행: OSM 폴백 경로 ──────────────────
-    ctx, drain = run(page, schedule_json, csv_text, "", False, ".")
+    # ── 0. 저장된 키 없음: 내장 기본 키(ncpKeyId)로 네이버 지도 시도 ──
+    ctx_default, drain_default = run(page, schedule_json, csv_text, "", False, ".")
+    defaultInfo = j(ctx_default, "({key: (function(){ return __storage['visitmap.naverKey'] == null ? null : __storage['visitmap.naverKey']; })(), "
+                             "naverSrc: (function(){ var out = ''; document.head.queryAll(function(n){ if (n.tagName === 'SCRIPT' && String(n.src || '').indexOf('oapi.map.naver.com') >= 0) out = String(n.src); return false; }); return out; })()})")
+    check("키를 저장한 적 없으면 기본 키 사용", "ncpKeyId=v2wsje7uvd" in (defaultInfo["naverSrc"] or ""), defaultInfo)
+    check("기본 키 상태에서도 지도 오류 화면 없음",
+          j(ctx_default, "document.getElementById('mapFallback').hidden") is True, defaultInfo)
+
+    # ── 1. 키를 지운 상태('' 저장): OSM 폴백 경로 ────────
+    ctx, drain = run(page, schedule_json, csv_text, "", False, ".", storage={"visitmap.naverKey": ""})
     result = j(ctx, "({counter: __text(document.getElementById('counter')), "
                       "cards: __articles().length, "
                       "options: document.getElementById('dateSelect').children.length, "
@@ -373,7 +384,7 @@ def main():
     check("날짜 옵션 = 전체 + 날짜수", info["options"] == len(dates) + 1, info["options"])
     check("기본 선택은 오늘(2026-11-20)", info["selected"] == "2026-11-20", info["selected"])
     check("상태 칩 생성", info["chips"] >= 3, info["chips"])
-    check("키 없음 안내 배너 표시", info["bannerHidden"] is False and "키" in (info["banner"] or ""), info["banner"])
+    check("키를 지우면 OSM + 키 안내 배너", info["bannerHidden"] is False and "키" in (info["banner"] or ""), info["banner"])
 
     # ── 2. 체크 → 번호 핀 ──────────────────────────────
     ctx.eval("""

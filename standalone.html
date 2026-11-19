@@ -265,7 +265,7 @@ article.card.picked{border-color:#9ad9b5;background:#f6fdf9}
       <button class="primary" type="button" id="keySave">저장 후 새로고침</button>
       <button type="button" id="keyClear">키 삭제</button>
     </div>
-    <p class="note">키가 없거나 인증이 안 되면 오픈스트리트맵 지도로 자동 표시됩니다. 주소·전화·길찾기 버튼은 키와 상관없이 네이버 지도로 열립니다. 주소 <code>?key=…</code> 로도 넣을 수 있어요. (발급: console.ncloud.com → Maps → Application 등록 → Dynamic Map 체크)</p>
+    <p class="note">기본 키가 미리 들어 있어서 그냥 열면 네이버 지도가 나옵니다. 다른 키로 바꾸려면 위에 입력 후 저장, 키를 비우려면 '키 삭제'를 누르세요. 키가 없거나 인증이 안 되면 오픈스트리트맵 지도로 자동 표시됩니다. 주소·전화·길찾기 버튼은 키와 상관없이 네이버 지도로 열립니다. 주소 <code>?key=…</code> 로도 넣을 수 있어요. (발급: console.ncloud.com → Maps → Application 등록 → Dynamic Map 체크)</p>
   </fieldset>
 
   <fieldset>
@@ -297,6 +297,7 @@ article.card.picked{border-color:#9ad9b5;background:#f6fdf9}
 (function(){
   'use strict';
 
+  var DEFAULT_NAVER_KEY = 'v2wsje7uvd';   // 네이버 클라우드 플랫폼 Maps Client ID (Dynamic Map)
   var STORAGE_KEY = 'visitmap.naverKey';
   var STORAGE_SOURCE = 'visitmap.sheetSource';
   var STORAGE_ENGINE = 'visitmap.engine';
@@ -1190,9 +1191,10 @@ article.card.picked{border-color:#9ad9b5;background:#f6fdf9}
   }
 
   function applyKey(key, reload){
-    store(STORAGE_KEY, key || null);
-    state.naverKey = key || '';
-    store(STORAGE_ENGINE, key ? null : 'osm');
+    var value = key == null ? '' : String(key).trim();
+    store(STORAGE_KEY, value);          // 빈 값도 저장 → '키 삭제'는 기본 키로 돌아가지 않고 오픈스트리트맵 유지
+    state.naverKey = value;
+    store(STORAGE_ENGINE, value ? null : 'osm');
     if (reload) window.location.reload();
   }
 
@@ -1398,7 +1400,8 @@ article.card.picked{border-color:#9ad9b5;background:#f6fdf9}
       var query = url.searchParams.toString();
       try { window.history.replaceState({}, document.title, url.pathname + (query ? '?' + query : '') + (url.hash || '')); } catch (error) {}
     } else {
-      state.naverKey = read(STORAGE_KEY) || '';
+      var storedKey = read(STORAGE_KEY);
+      state.naverKey = storedKey == null ? DEFAULT_NAVER_KEY : storedKey;
     }
 
     var today = new Date();
