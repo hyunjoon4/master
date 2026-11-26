@@ -3,7 +3,7 @@
   "source": "디앤씨 영업부 박현준 차장 스케줄 및 이력등록",
   "spreadsheetId": "1MaoyT00LPV5iQmlJYvMn8X8ynyYe4GZu50xVP5u5ArQ",
   "csv": "schedule.csv",
-  "generatedAt": "2026-11-26 17:32",
+  "generatedAt": "2026-11-27 08:31",
   "count": 201,
   "withCoordinates": 201,
   "skipped": {
@@ -3000,8 +3000,8 @@
    "phone": "010-7765-1924",
    "address": "충남 서산시 호수공원9로 87-9 1층",
    "memo": "대표님통화,/무난히오라하심. / 가족고용산재 넣으셧다함 /간단경정",
-   "status": "대기",
-   "history": "",
+   "status": "거절",
+   "history": "기장에다물어보고 연락준다고하심",
    "lat": 36.771733,
    "lng": 126.450914
   },
